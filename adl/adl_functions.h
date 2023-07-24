@@ -33,9 +33,6 @@
 #	include <dlfcn.h>	//dyopen, dlsym, dlclose
 #	include <stdlib.h>
 #	include <string.h>	//memeset
-#else
-#	include <windows.h>
-#	include <tchar.h>
 #endif
 
 #include "adl_sdk.h"

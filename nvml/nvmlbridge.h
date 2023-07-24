@@ -14,14 +14,7 @@
 #include <dlfcn.h>
 
 void *hDLLN;
-#elif WIN32
-#include <windows.h>
-typedef unsigned int uint;
 
-#define dlsym (void *) GetProcAddress
-#define dlclose FreeLibrary
-
-static HMODULE hDLLN;
 #endif
 
 nvmlReturn_t init_nvml();

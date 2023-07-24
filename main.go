@@ -228,10 +228,6 @@ func main() {
 wait:
 	log.Info("Starting processes", "worker", *flagworkername, "mode", mode)
 
-	if !nvml.Active() {
-		log.Warn("NVIDIA (NVML) hardware monitor library couldn't initialize")
-	}
-
 	if !adl.Active() {
 		log.Warn("AMD (ADL) hardware monitor library couldn't initialize")
 	}

@@ -21,9 +21,6 @@
 # include <dlfcn.h>
 # include <stdlib.h>
 # include <unistd.h>
-#else /* WIN32 */
-# include <windows.h>
-# include <tchar.h>
 #endif
 #include "adl_functions.h"
 

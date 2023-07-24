@@ -3,6 +3,7 @@ module github.com/hainakus/eminer
 go 1.14
 
 require (
+	github.com/Gustav-Simonsson/go-opencl v0.0.0-20150630110553-593e01cfc4f3 // indirect
 	github.com/btcsuite/btcd v0.22.0-beta // indirect
 	github.com/deckarep/golang-set v1.8.0
 	github.com/denisbrodbeck/machineid v1.0.1 // indirect
@@ -10,6 +11,7 @@ require (
 	github.com/ethash/eminer v0.0.0-20220312192026-9b2c7191a21e
 	github.com/ethash/go-opencl v0.0.0-20170924192419-f1ea00997e28
 	github.com/ethereum/go-ethereum v1.12.0
+	github.com/ethereumproject/ethash v0.0.0-20180109211943-65a5b25efc27 // indirect
 	github.com/ethereumproject/go-ethereum v5.5.2+incompatible
 	github.com/getsentry/sentry-go v0.18.0 // indirect
 	github.com/gin-gonic/gin v1.8.1
