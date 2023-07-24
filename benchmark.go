@@ -7,10 +7,10 @@ import (
 	"sync"
 	"time"
 
-	"ethashGpu/ethash"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereumproject/go-ethereum/common/hexutil"
+	"github.com/hainakus/eminer/ethash"
 )
 
 var MaxUint256 = new(big.Int).Exp(big.NewInt(2), big.NewInt(256), big.NewInt(0))

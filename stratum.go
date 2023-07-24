@@ -3,15 +3,15 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"ethashGpu/stratum"
 	"fmt"
+	"github.com/hainakus/eminer/stratum"
 	"strings"
 	"sync"
 	"time"
 
-	"ethashGpu/ethash"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereumproject/go-ethereum/common/hexutil"
+	"github.com/hainakus/eminer/ethash"
 )
 
 // Stratum mode

@@ -11,11 +11,11 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"ethashGpu/adl"
-	"ethashGpu/http"
-	"ethashGpu/nvml"
 	"github.com/ethash/go-opencl/cl"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/hainakus/eminer/adl"
+	"github.com/hainakus/eminer/http"
+	"github.com/hainakus/eminer/nvml"
 	metrics "github.com/rcrowley/go-metrics"
 	"github.com/rcrowley/go-metrics/stathat"
 )

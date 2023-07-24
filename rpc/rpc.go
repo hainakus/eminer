@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	" github.com/ethereumproject/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 // Client struct

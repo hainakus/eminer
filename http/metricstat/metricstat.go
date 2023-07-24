@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"ethashGpu/http/ts"
+	"github.com/hainakus/eminer/http/ts"
 	metrics "github.com/rcrowley/go-metrics"
 )
 

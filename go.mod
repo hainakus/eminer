@@ -1,4 +1,4 @@
-module ethashGpu
+module github.com/hainakus/eminer
 
 go 1.14
 

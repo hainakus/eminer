@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"ethashGpu/ethash"
 	"fmt"
 	common2 "github.com/ethereumproject/go-ethereum/common"
 	"github.com/ethereumproject/go-ethereum/crypto/sha3"
+	"github.com/hainakus/eminer/ethash"
 	"hash"
 	"math/big"
 	"math/rand"
@@ -15,10 +15,10 @@ import (
 	"strings"
 	"time"
 
-	"ethashGpu/client"
 	"github.com/ethash/go-opencl/cl"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/hainakus/eminer/client"
 )
 
 const (
