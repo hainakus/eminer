@@ -1,7 +1,7 @@
 package nvml
 
 /*
-#cgo CFLAGS: -DWIN32
+#cgo CFLAGS:
 #cgo LDFLAGS:
 #include "nvmlbridge.h"
 */

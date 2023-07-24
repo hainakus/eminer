@@ -1,7 +1,10 @@
+//go:build windows && !cgo
+// +build windows,!cgo
+
 package adl
 
 /*
-#cgo CFLAGS: -DWIN32
+#cgo CFLAGS:
 #cgo LDFLAGS:
 #include "adlbridge.h"
 

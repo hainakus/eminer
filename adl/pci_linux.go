@@ -1,3 +1,6 @@
+//go:build linux && amd64 && windows && darwin && !cgo
+// +build linux,amd64,windows,darwin,!cgo
+
 package adl
 
 import (
