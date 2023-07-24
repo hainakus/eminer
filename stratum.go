@@ -3,15 +3,15 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"ethashGpu/stratum"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/ethash/eminer/ethash"
-	"github.com/ethash/eminer/stratum"
-	"github.com/ethereum/go-ethereum/common/hexutil"
+	"ethashGpu/ethash"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereumproject/go-ethereum/common/hexutil"
 )
 
 // Stratum mode
@@ -189,7 +189,7 @@ func Stratum(stopChan <-chan struct{}) {
 		go func(deviceID int) {
 			defer wg.Done()
 
-			farmMineByDevice(miner, deviceID, sc, stopFarmMine)
+			//farmMineByDevice(miner, deviceID, sc, stopFarmMine)
 		}(deviceID)
 	}
 
@@ -250,7 +250,7 @@ func Stratum(stopChan <-chan struct{}) {
 				go func(deviceID int) {
 					defer wg.Done()
 
-					farmMineByDevice(miner, deviceID, sc, stopFarmMine)
+					//farmMineByDevice(miner, deviceID, sc, stopFarmMine)
 				}(deviceID)
 			}
 		}

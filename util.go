@@ -1,20 +1,38 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"ethashGpu/ethash"
 	"fmt"
+	common2 "github.com/ethereumproject/go-ethereum/common"
+	"github.com/ethereumproject/go-ethereum/crypto/sha3"
+	"hash"
 	"math/big"
 	"math/rand"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/ethash/eminer/client"
-	"github.com/ethash/eminer/ethash"
+	"ethashGpu/client"
 	"github.com/ethash/go-opencl/cl"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
+)
+
+const (
+	datasetInitBytes   = 1 << 30 // Bytes in dataset at genesis
+	datasetGrowthBytes = 1 << 23 // Dataset growth per epoch
+	cacheInitBytes     = 1 << 24 // Bytes in cache at genesis
+	cacheGrowthBytes   = 1 << 17 // Cache growth per epoch
+	epochLength        = 30000   // Blocks per epoch
+	mixBytes           = 128     // Width of mix
+	hashBytes          = 64      // Hash length in bytes
+	hashWords          = 16      // Number of 32 bit ints in a hash
+	datasetParents     = 256     // Number of parents of each dataset element
+	cacheRounds        = 3       // Number of rounds in cache production
+	loopAccesses       = 64      // Number of accesses in hashimoto loop
 )
 
 func argToIntSlice(arg string) (devices []int) {
@@ -72,7 +90,7 @@ func randomHash() string {
 	token := make([]byte, 32)
 	rand.Read(token)
 
-	return common.ToHex(token)
+	return common2.ToHex(token)
 }
 
 func randomString(n int) string {
@@ -87,6 +105,42 @@ func randomString(n int) string {
 	return string(b)
 }
 
+type hasher func(dest []byte, data []byte)
+
+func makeHasher(h hash.Hash) hasher {
+	return func(dest []byte, data []byte) {
+		h.Write(data)
+		h.Sum(dest[:0])
+		h.Reset()
+	}
+}
+
+func number(seedHash common.Hash) (int64, error) {
+	var epoch uint64
+	find := make([]byte, 32)
+	seed := seedHash.Bytes()
+
+	if bytes.Equal(find, seed) {
+		return 0, nil
+	}
+
+	keccak256 := makeHasher(sha3.NewKeccak256())
+	for epoch = 1; epoch < 2048; epoch++ {
+		keccak256(find, find)
+		if bytes.Equal(seed, find) {
+			return int64(epoch * epochLength), nil
+		}
+	}
+
+	if epoch == 2048 {
+		return -1, fmt.Errorf("apparent block number for seed %s", seedHash.String())
+	}
+
+	return -1, fmt.Errorf("cant find block number in epoch for seed %s", seedHash.String())
+}
+func Number(seedHash common.Hash) (int64, error) {
+	return number(seedHash)
+}
 func notifyWork(result *json.RawMessage) (*ethash.Work, error) {
 	var blockNumber int64
 	var getWork []string
@@ -101,12 +155,12 @@ func notifyWork(result *json.RawMessage) (*ethash.Work, error) {
 
 	seedHash := common.BytesToHash(common.FromHex(getWork[1]))
 
-	blockNumber, err = ethash.Number(seedHash)
+	blockNumber, err = Number(seedHash)
 	if err != nil {
 		return nil, err
 	}
 
-	w := ethash.NewWork(blockNumber, common.BytesToHash(common.FromHex(getWork[0])),
+	w := ethash.NewWork(blockNumber, common.Hash(common2.BytesToHash(common.FromHex(getWork[0]))),
 		seedHash, new(big.Int).SetBytes(common.FromHex(getWork[2])), *flagfixediff)
 
 	if len(getWork) > 4 { //extraNonce
@@ -127,7 +181,7 @@ func getWork(c client.Client) (*ethash.Work, error) {
 
 	seedHash := common.BytesToHash(common.FromHex(getWork[1]))
 
-	blockNumber, err = ethash.Number(seedHash)
+	blockNumber, err = Number(seedHash)
 	if err != nil {
 		return nil, err
 	}

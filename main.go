@@ -11,9 +11,9 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/ethash/eminer/adl"
-	"github.com/ethash/eminer/http"
-	"github.com/ethash/eminer/nvml"
+	"ethashGpu/adl"
+	"ethashGpu/http"
+	"ethashGpu/nvml"
 	"github.com/ethash/go-opencl/cl"
 	"github.com/ethereum/go-ethereum/log"
 	metrics "github.com/rcrowley/go-metrics"
@@ -205,9 +205,9 @@ func main() {
 	}
 
 	if *flagstratum == "" && *flagmine != "" {
-		go Farm(stopChan)
-		mode = "farm"
-		goto wait
+		//go Farm(stopChan)
+		//mode = "farm"
+		//goto wait
 	}
 
 	if *flagstratum != "" {

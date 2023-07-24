@@ -12,10 +12,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ethereum/go-ethereum/log"
+	" github.com/ethereumproject/go-ethereum/log"
 )
 
-//Client struct
+// Client struct
 type Client struct {
 	sync.RWMutex
 
@@ -33,13 +33,13 @@ type Client struct {
 	timeout time.Duration
 }
 
-//GetBlockReply struct
+// GetBlockReply struct
 type GetBlockReply struct {
 	Number     string `json:"number"`
 	Difficulty string `json:"difficulty"`
 }
 
-//JSONRpcResp struct
+// JSONRpcResp struct
 type JSONRpcResp struct {
 	ID     *json.RawMessage       `json:"id"`
 	Result *json.RawMessage       `json:"result"`
@@ -77,7 +77,7 @@ func New(rawURLs string, timeout time.Duration) (*Client, error) {
 	return c, nil
 }
 
-//GetWork func
+// GetWork func
 func (r *Client) GetWork() ([]string, error) {
 	rpcResp, err := r.doPost("eth_getWork", []string{}, 73)
 	var reply []string
@@ -91,7 +91,7 @@ func (r *Client) GetWork() ([]string, error) {
 	return reply, err
 }
 
-//SubmitWork func
+// SubmitWork func
 func (r *Client) SubmitWork(params interface{}) (bool, error) {
 	rpcResp, err := r.doPost("eth_submitWork", params, 73)
 	var result bool
@@ -111,7 +111,7 @@ func (r *Client) SubmitWork(params interface{}) (bool, error) {
 	return result, nil
 }
 
-//SubmitHashrate func
+// SubmitHashrate func
 func (r *Client) SubmitHashrate(params interface{}) (bool, error) {
 	rpcResp, err := r.doPost("eth_submitHashrate", params, 73)
 	var result bool
@@ -184,7 +184,7 @@ func (r *Client) doPost(method string, params interface{}, id uint64) (JSONRpcRe
 	return rpcResp, nil
 }
 
-//Check func
+// Check func
 func (r *Client) Check() (bool, error) {
 	_, err := r.GetWork()
 	if err != nil {
@@ -194,7 +194,7 @@ func (r *Client) Check() (bool, error) {
 	return !r.Sick(), nil
 }
 
-//Sick func
+// Sick func
 func (r *Client) Sick() bool {
 	r.RLock()
 	defer r.RUnlock()

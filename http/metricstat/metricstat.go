@@ -4,8 +4,8 @@ import (
 	"sync"
 	"time"
 
+	"ethashGpu/http/ts"
 	metrics "github.com/rcrowley/go-metrics"
-	"github.com/ethash/eminer/http/ts"
 )
 
 // MetricStat structure

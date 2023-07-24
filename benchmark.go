@@ -2,15 +2,18 @@ package main
 
 import (
 	"fmt"
+	common2 "github.com/ethereumproject/go-ethereum/common"
 	"math/big"
 	"sync"
 	"time"
 
-	"github.com/ethash/eminer/ethash"
+	"ethashGpu/ethash"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereumproject/go-ethereum/common/hexutil"
 )
+
+var MaxUint256 = new(big.Int).Exp(big.NewInt(2), big.NewInt(256), big.NewInt(0))
 
 // Benchmark mode
 func Benchmark(stopChan chan struct{}) {
@@ -21,7 +24,7 @@ func Benchmark(stopChan chan struct{}) {
 	hh := common.BytesToHash(common.FromHex(randomHash()))
 	sh := common.BytesToHash(common.FromHex("0x0000000000000000000000000000000000000000000000000000000000000000"))
 	diff := new(big.Int).SetUint64(5e8) // 500 MH
-	work := ethash.NewWork(45, hh, sh, new(big.Int).Div(ethash.MaxUint256, diff), *flagfixediff)
+	work := ethash.NewWork(45, hh, sh, new(big.Int).Div(MaxUint256, diff), *flagfixediff)
 
 	miner.Work = work
 
@@ -80,7 +83,7 @@ func Benchmark(stopChan chan struct{}) {
 
 		onSolutionFound := func(hh common.Hash, nonce uint64, digest []byte, roundVariance uint64) {
 			if nonce != 0 {
-				log.Info("Solution accepted", "hash", hh.TerminalString(), "digest", common.ToHex(digest), "nonce", hexutil.Uint64(nonce).String())
+				log.Info("Solution accepted", "hash", hh.TerminalString(), "digest", common2.ToHex(digest), "nonce", hexutil.Uint64(nonce).String())
 
 				miner.FoundSolutions.Update(int64(roundVariance))
 				if *flagfixediff {

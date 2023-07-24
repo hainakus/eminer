@@ -15,9 +15,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereumproject/go-ethereum/common"
+	"github.com/ethereumproject/go-ethereum/core/types"
 )
 
 // Client structure
@@ -497,7 +497,7 @@ func (c *Client) UnregisterNotification(method string) {
 	delete(c.notificationCh, method)
 }
 
-//Sick func
+// Sick func
 func (c *Client) Sick() bool {
 	return c.sick
 }

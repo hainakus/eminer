@@ -7,7 +7,12 @@ import (
 	crand "crypto/rand"
 	"encoding/binary"
 	"encoding/json"
+	"ethashGpu/adl"
+	"ethashGpu/counter"
+	"ethashGpu/ethash/gcn"
+	"ethashGpu/nvml"
 	"fmt"
+
 	"math"
 	"math/big"
 	mrand "math/rand"
@@ -16,11 +21,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/ethash/eminer/adl"
-	"github.com/ethash/eminer/counter"
-	clbin "github.com/ethash/eminer/ethash/cl"
-	"github.com/ethash/eminer/ethash/gcn"
-	"github.com/ethash/eminer/nvml"
 	"github.com/ethash/go-opencl/cl"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -29,7 +29,7 @@ import (
 	metrics "github.com/rcrowley/go-metrics"
 )
 
-//OpenCLDevice struct
+// OpenCLDevice struct
 type OpenCLDevice struct {
 	sync.RWMutex
 
@@ -82,7 +82,7 @@ type OpenCLDevice struct {
 	logger log.Logger
 }
 
-//OpenCLMiner struct
+// OpenCLMiner struct
 type OpenCLMiner struct {
 	sync.RWMutex
 
@@ -158,7 +158,7 @@ var kernels = []*kernel{
 	{id: 1, source: kernelSource("kernel1.cl"), threadCount: 8},
 }
 
-//NewCL func
+// NewCL func
 func NewCL(deviceIds []int, workerName string, binary bool, version string) *OpenCLMiner {
 	ids := make([]int, len(deviceIds))
 	copy(ids, deviceIds)
@@ -209,8 +209,9 @@ func (c *OpenCLMiner) InitCL() error {
 	}
 
 	blockNum := c.Work.BlockNumberU64()
-
-	pow := New("", 1, 0, "", 1, 0)
+	var emptyConfig Config
+	var emptySlice []string
+	pow := New(emptyConfig, emptySlice, false, 6)
 	//pow.dataset(blockNum) // generates DAG on CPU if we don't have it
 	pow.cache(blockNum) // and cache
 
@@ -566,7 +567,7 @@ func (c *OpenCLMiner) generateDAGOnDevice(d *OpenCLDevice) error {
 		return fmt.Errorf("cache buffer err: %v", err)
 	}
 
-	cachePtr := unsafe.Pointer(&cache[0])
+	cachePtr := unsafe.Pointer(&cache.cache)
 	_, err = d.queue.EnqueueWriteBuffer(cacheBuf, true, 0, c.cacheSize, cachePtr, nil)
 	if err != nil {
 		return fmt.Errorf("writing to cache buf failed: %v", err)
@@ -719,7 +720,7 @@ func (c *OpenCLMiner) ReleaseAll() {
 	}
 }
 
-//Release selected device
+// Release selected device
 func (c *OpenCLMiner) Release(deviceID int) {
 	index := c.getDevice(deviceID)
 	d := c.devices[index]
@@ -751,6 +752,13 @@ func (c *OpenCLMiner) CmpDagSize(work *Work) bool {
 	newDagSize := datasetSize(work.BlockNumberU64())
 
 	return newDagSize != c.dagSize
+}
+func convertUint64ToUint32(input []uint64) []uint32 {
+	output := make([]uint32, 0, len(input))
+	for _, v := range input {
+		output = append(output, uint32(v))
+	}
+	return output
 }
 
 // Seal hashes on GPU
@@ -951,8 +959,8 @@ func (c *OpenCLMiner) Seal(stop <-chan struct{}, deviceID int, onSolutionFound f
 							}
 
 							number := c.Work.BlockNumberU64()
-							cache := c.ethash.cache(number)
-							mix, _ := hashimotoLight(c.dagSize, cache, hh.Bytes(), checkNonce)
+							cache2 := c.ethash.cache(number)
+							mix, _ := hashimotoLight(c.dagSize, cache2.cache, hh.Bytes(), checkNonce)
 
 							if !bytes.Equal(mix, mixDigest) {
 								d.logger.Error("Solution found but not verified", "worker", s.bufIndex,
@@ -1079,9 +1087,9 @@ func (c *OpenCLMiner) Seal(stop <-chan struct{}, deviceID int, onSolutionFound f
 
 // WorkChanged function
 func (c *OpenCLMiner) WorkChanged() {
-        for _, d := range c.devices {
+	for _, d := range c.devices {
 		d.workCh <- struct{}{}
-        }
+	}
 }
 
 // GetHashrate for device
@@ -1281,7 +1289,7 @@ func replaceWords(text string, kvs map[string]string) string {
 }
 
 func kernelSource(name string) string {
-	asset, err := clbin.Asset("cl/" + name)
+	asset, err := gcn.Asset("cl/" + name)
 	if err != nil {
 		return ""
 	}
