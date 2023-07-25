@@ -11,8 +11,8 @@ import (
 	"github.com/hainakus/eminer/adl"
 	"github.com/hainakus/eminer/counter"
 	"github.com/hainakus/eminer/ethash/gcn"
-	"github.com/hainakus/eminer/nvml"
-
+	"hainakus/eminer/nvml"
+	_ "hainakus/eminer/nvml"
 	"math"
 	"math/big"
 	mrand "math/rand"

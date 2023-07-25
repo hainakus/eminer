@@ -1,4 +1,4 @@
-module github.com/hainakus/eminer
+module hainakus/eminer
 
 go 1.14
 
@@ -15,6 +15,7 @@ require (
 	github.com/ethereumproject/go-ethereum v5.5.2+incompatible
 	github.com/getsentry/sentry-go v0.18.0 // indirect
 	github.com/gin-gonic/gin v1.8.1
+	github.com/hainakus/eminer v0.0.0-20230724224147-fa6a508e4596 // indirect
 	github.com/hako/durafmt v0.0.0-20210608085754-5c1018a4e16b
 	github.com/hashicorp/golang-lru v0.5.5-0.20210104140557-80c98217689d
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475
