@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	common2 "github.com/ethereumproject/go-ethereum/common"
-	"github.com/ethereumproject/go-ethereum/crypto/sha3"
 	"github.com/hainakus/eminer/ethash"
+	common2 "github.com/hainakus/go-rethereum/common"
+	"golang.org/x/crypto/sha3"
 	"hash"
 	"math/big"
 	"math/rand"
@@ -16,9 +16,9 @@ import (
 	"time"
 
 	"github.com/ethash/go-opencl/cl"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/log"
 	"github.com/hainakus/eminer/client"
+	"github.com/hainakus/go-rethereum/common"
+	"github.com/hainakus/go-rethereum/log"
 )
 
 const (
@@ -62,7 +62,7 @@ func getAllDevices() (devices []int) {
 			continue
 		}
 
-		ds, err := cl.GetDevices(p, cl.DeviceTypeGPU)
+		ds, err := platforms[0].GetDevices(cl.DeviceTypeGPU)
 		if err != nil {
 			continue
 		}
@@ -90,7 +90,7 @@ func randomHash() string {
 	token := make([]byte, 32)
 	rand.Read(token)
 
-	return common2.ToHex(token)
+	return common2.Bytes2Hex(token)
 }
 
 func randomString(n int) string {
@@ -124,7 +124,7 @@ func number(seedHash common.Hash) (int64, error) {
 		return 0, nil
 	}
 
-	keccak256 := makeHasher(sha3.NewKeccak256())
+	keccak256 := makeHasher(sha3.NewLegacyKeccak256())
 	for epoch = 1; epoch < 2048; epoch++ {
 		keccak256(find, find)
 		if bytes.Equal(seed, find) {

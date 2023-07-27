@@ -4,5 +4,6 @@ package client
 type Client interface {
 	GetWork() ([]string, error)
 	SubmitHashrate(params interface{}) (bool, error)
-	SubmitWork(params interface{}) (bool, error)
+	SubmitWork(params []interface{}) (bool, error)
+	SubmitWorkStr(params interface{}) (bool, error)
 }

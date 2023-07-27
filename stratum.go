@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereumproject/go-ethereum/common/hexutil"
 	"github.com/hainakus/eminer/ethash"
+	"github.com/hainakus/go-rethereum/common/hexutil"
+	"github.com/hainakus/go-rethereum/log"
 )
 
 // Stratum mode
@@ -189,7 +189,7 @@ func Stratum(stopChan <-chan struct{}) {
 		go func(deviceID int) {
 			defer wg.Done()
 
-			//farmMineByDevice(miner, deviceID, sc, stopFarmMine)
+			farmMineByDevice(miner, deviceID, sc, stopFarmMine)
 		}(deviceID)
 	}
 

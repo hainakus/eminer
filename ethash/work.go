@@ -6,7 +6,7 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
+	"github.com/hainakus/go-rethereum/common"
 )
 
 var MaxUint256 = new(big.Int).Exp(big.NewInt(2), big.NewInt(256), big.NewInt(0))

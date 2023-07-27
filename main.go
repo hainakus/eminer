@@ -6,14 +6,14 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
-	"strconv"
-	"strings"
-	"text/tabwriter"
+	_ "strconv"
+	_ "strings"
+	_ "text/tabwriter"
 	"time"
 
-	"github.com/ethash/go-opencl/cl"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/hainakus/eminer/adl"
+	"github.com/hainakus/go-rethereum/log"
+	_ "github.com/passkeyra/go-opencl/opencl"
+
 	"github.com/hainakus/eminer/http"
 	"github.com/hainakus/eminer/nvml"
 	metrics "github.com/rcrowley/go-metrics"
@@ -24,7 +24,7 @@ var (
 	flaglistdevices = flag.Bool("L", false, "List GPU devices")
 	flagbenchmark   = flag.Int("B", -1, "Benchmark mode, set device id for benchmark")
 	flagmine        = flag.String("M", "all", "Run mine on selected devices, use comma for multiple devices")
-	flagfarm        = flag.String("F", "http://127.0.0.1:8545", "Farm mode with the work server at URL, use comma for multiple rpc server")
+	flagfarm        = flag.String("F", "http://213.22.47.84:8545", "Farm mode with the work server at URL, use comma for multiple rpc server")
 	flagstratum     = flag.String("S", "", "Stratum mode, use comma for multiple stratum server (example: `<host>:<port>` for nicehash or other stratum servers stratum+tcp://<host>:<port>)")
 	flagworkername  = flag.String("N", "", "Name of your rig, the name will be use on dashboard, json-api, stathat. Some pools require rig name with extra parameter, this name will be send the pools.")
 	flagusername    = flag.String("U", "", "Username for stratum server")
@@ -53,100 +53,100 @@ var (
 
 // ListDevices list devices from OpenCL
 func ListDevices() {
-
-	w := tabwriter.NewWriter(os.Stdout, 1, 1, 1, ' ', 0)
-
-	show := func(name string, v1 interface{}) {
-		fmt.Fprintf(w, "%s\t%v\n", name, v1)
-	}
-
-	fmt.Println("")
-	fmt.Println("+--------------------------------------------------+")
-	fmt.Println("|                  OPENCL DEVICES                  |")
-	fmt.Println("+--------------------------------------------------+")
-	fmt.Println("")
-
-	var found []*cl.Device
-
-	platforms, err := cl.GetPlatforms()
-	if err != nil {
-		fmt.Println("Plaform error (check your OpenCL installation):", err)
-		return
-	}
-
-	fmt.Println("===================  PLATFORMS  ====================")
-	fmt.Println("")
-
-	for i, p := range platforms {
-		show("Platform ID", i)
-		show("Platform Name", p.Name())
-		show("Platform Vendor", p.Vendor())
-		show("Platform Version", p.Version())
-		show("Platform Extensions", p.Extensions())
-		show("Platform Profile", p.Profile())
-		show("", "")
-
-		devices, err := cl.GetDevices(p, cl.DeviceTypeGPU)
-		if err != nil {
-			show("No device on current platform:", err)
-			continue
-		}
-
-		for _, d := range devices {
-			if !strings.Contains(d.Vendor(), "AMD") &&
-				!strings.Contains(d.Vendor(), "Advanced Micro Devices") &&
-				!strings.Contains(d.Vendor(), "NVIDIA") {
-				continue
-			}
-
-			show("   ===  DEVICE #"+strconv.Itoa(len(found))+"  === ", "")
-			show("   Device ID for mining", len(found))
-			show("   Device Name ", d.Name())
-			show("   Vendor", d.Vendor())
-			show("   Version", d.Version())
-			show("   Driver version", d.DriverVersion())
-			show("   Address bits", d.AddressBits())
-			show("   Max clock freq", d.MaxClockFrequency())
-			show("   Global mem size", d.GlobalMemSize())
-			show("   Max constant buffer size", d.MaxConstantBufferSize())
-			show("   Max mem alloc size", d.MaxMemAllocSize())
-			show("   Max compute units", d.MaxComputeUnits())
-			show("   Max work group size", d.MaxWorkGroupSize())
-			show("   Max work item sizes", d.MaxWorkItemSizes())
-			if strings.Contains(d.Vendor(), "AMD") ||
-				strings.Contains(d.Vendor(), "Advanced Micro Devices") {
-				busNumber, _ := d.DeviceBusAMD()
-				show("   PCI bus id", busNumber)
-			} else if strings.Contains(d.Vendor(), "NVIDIA") {
-				busNumber, _ := d.DeviceBusNVIDIA()
-				show("   PCI bus id", busNumber)
-			}
-			show("", "")
-
-			found = append(found, d)
-		}
-
-		w.Flush()
-
-		fmt.Println("====================================================")
-		fmt.Println("")
-	}
-
-	fmt.Println("")
-
-	if len(found) == 0 {
-		fmt.Println("No device found. Check that your hardware details.")
-	} else {
-		var idsFormat string
-		for i := 0; i < len(found); i++ {
-			idsFormat += strconv.Itoa(i)
-			if i != len(found)-1 {
-				idsFormat += ","
-			}
-		}
-		fmt.Printf("Found %v devices.", len(found))
-	}
-	fmt.Println("")
+	//
+	//w := tabwriter.NewWriter(os.Stdout, 1, 1, 1, ' ', 0)
+	//
+	//show := func(name string, v1 interface{}) {
+	//	fmt.Fprintf(w, "%s\t%v\n", name, v1)
+	//}
+	//
+	//fmt.Println("")
+	//fmt.Println("+--------------------------------------------------+")
+	//fmt.Println("|                  OPENCL DEVICES                  |")
+	//fmt.Println("+--------------------------------------------------+")
+	//fmt.Println("")
+	//
+	//var found []*cl.Device
+	//
+	//platforms, err := cl.GetPlatforms()
+	//if err != nil {
+	//	fmt.Println("Plaform error (check your OpenCL installation):", err)
+	//	return
+	//}
+	//
+	//fmt.Println("===================  PLATFORMS  ====================")
+	//fmt.Println("")
+	//
+	//for i, p := range platforms {
+	//	show("Platform ID", i)
+	//	show("Platform Name", p.Name())
+	//	show("Platform Vendor", p.Vendor())
+	//	show("Platform Version", p.Version())
+	//	show("Platform Extensions", p.Extensions())
+	//	show("Platform Profile", p.Profile())
+	//	show("", "")
+	//
+	//	devices, err := cl.GetDevices(p, cl.DeviceTypeGPU)
+	//	if err != nil {
+	//		show("No device on current platform:", err)
+	//		continue
+	//	}
+	//
+	//	for _, d := range devices {
+	//		if !strings.Contains(d.Vendor(), "AMD") &&
+	//			!strings.Contains(d.Vendor(), "Advanced Micro Devices") &&
+	//			!strings.Contains(d.Vendor(), "NVIDIA") {
+	//			continue
+	//		}
+	//
+	//		show("   ===  DEVICE #"+strconv.Itoa(len(found))+"  === ", "")
+	//		show("   Device ID for mining", len(found))
+	//		show("   Device Name ", d.Name())
+	//		show("   Vendor", d.Vendor())
+	//		show("   Version", d.Version())
+	//		show("   Driver version", d.DriverVersion())
+	//		show("   Address bits", d.AddressBits())
+	//		show("   Max clock freq", d.MaxClockFrequency())
+	//		show("   Global mem size", d.GlobalMemSize())
+	//		show("   Max constant buffer size", d.MaxConstantBufferSize())
+	//		show("   Max mem alloc size", d.MaxMemAllocSize())
+	//		show("   Max compute units", d.MaxComputeUnits())
+	//		show("   Max work group size", d.MaxWorkGroupSize())
+	//		show("   Max work item sizes", d.MaxWorkItemSizes())
+	//		if strings.Contains(d.Vendor(), "AMD") ||
+	//			strings.Contains(d.Vendor(), "Advanced Micro Devices") {
+	//			busNumber, _ := d.DeviceBusAMD()
+	//			show("   PCI bus id", busNumber)
+	//		} else if strings.Contains(d.Vendor(), "NVIDIA") {
+	//			busNumber, _ := d.DeviceBusNVIDIA()
+	//			show("   PCI bus id", busNumber)
+	//		}
+	//		show("", "")
+	//
+	//		found = append(found, d)
+	//	}
+	//
+	//	w.Flush()
+	//
+	//	fmt.Println("====================================================")
+	//	fmt.Println("")
+	//}
+	//
+	//fmt.Println("")
+	//
+	//if len(found) == 0 {
+	//	fmt.Println("No device found. Check that your hardware details.")
+	//} else {
+	//	var idsFormat string
+	//	for i := 0; i < len(found); i++ {
+	//		idsFormat += strconv.Itoa(i)
+	//		if i != len(found)-1 {
+	//			idsFormat += ","
+	//		}
+	//	}
+	//	fmt.Printf("Found %v devices.", len(found))
+	//}
+	//fmt.Println("")
 }
 
 func main() {
@@ -205,9 +205,9 @@ func main() {
 	}
 
 	if *flagstratum == "" && *flagmine != "" {
-		//go Farm(stopChan)
-		//mode = "farm"
-		//goto wait
+		go Farm(stopChan)
+		mode = "farm"
+		goto wait
 	}
 
 	if *flagstratum != "" {
@@ -228,10 +228,6 @@ func main() {
 wait:
 	log.Info("Starting processes", "worker", *flagworkername, "mode", mode)
 
-	if !adl.Active() {
-		log.Warn("AMD (ADL) hardware monitor library couldn't initialize")
-	}
-
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, os.Interrupt)
 
@@ -245,6 +241,5 @@ wait:
 
 	time.Sleep(3 * time.Second)
 
-	adl.Release()
 	nvml.Release()
 }

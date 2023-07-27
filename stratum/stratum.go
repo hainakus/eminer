@@ -15,9 +15,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereumproject/go-ethereum/common"
-	"github.com/ethereumproject/go-ethereum/core/types"
+	"github.com/hainakus/go-rethereum/common"
+	"github.com/hainakus/go-rethereum/core/types"
+	"github.com/hainakus/go-rethereum/log"
 )
 
 // Client structure
@@ -61,6 +61,11 @@ type Client struct {
 	minerVersion string
 
 	tls bool
+}
+
+func (c *Client) SubmitWork(params []interface{}) (bool, error) {
+	//TODO implement me
+	panic("implement me")
 }
 
 type stratumWork struct {
@@ -421,8 +426,8 @@ func (c *Client) SubmitHashrate(params interface{}) (bool, error) {
 	return ok, nil
 }
 
-// SubmitWork to stratum server
-func (c *Client) SubmitWork(params interface{}) (bool, error) {
+// SubmitWorkStr to stratum server
+func (c *Client) SubmitWorkStr(params interface{}) (bool, error) {
 	method := "eth_submitWork"
 	var solution []interface{}
 
@@ -783,10 +788,10 @@ func (c *Client) callWorkCh() {
 func (c *Client) workToStringSlice() (work []string) {
 	work = append(work, c.work.seedHash)
 	work = append(work, c.work.headerHash)
-	work = append(work, common.ToHex(c.work.target.Bytes()))
+	work = append(work, common.Bytes2Hex(c.work.target.Bytes()))
 
 	if c.work.extraNonce != nil {
-		work = append(work, common.ToHex(c.work.extraNonce.Bytes()))
+		work = append(work, common.Bytes2Hex(c.work.extraNonce.Bytes()))
 		work = append(work, strconv.Itoa(c.work.extraNonceSize*4)) //sizebits
 	}
 

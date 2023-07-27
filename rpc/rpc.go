@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"github.com/hainakus/go-rethereum/core/types"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -12,8 +14,30 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ethereum/go-ethereum/log"
+	"github.com/hainakus/go-rethereum/log"
 )
+
+var (
+	rpcUrl string = "http://213.22.47.84:8545"
+)
+
+type RpcReback struct {
+	Jsonrpc string   `json:"jsonrpc"`
+	Result  []string `json:"result"`
+	Id      int      `json:"id"`
+}
+
+type RpcInfo struct {
+	Jsonrpc string   `json:"jsonrpc"`
+	Method  string   `json:""`
+	Params  []string `json:"params"`
+	Id      int      `json:"id"`
+}
+
+type Work struct {
+	Header *types.Header
+	Hash   string
+}
 
 // Client struct
 type Client struct {
@@ -31,6 +55,16 @@ type Client struct {
 	FailsCount  uint64
 
 	timeout time.Duration
+}
+
+func (r *Client) SubmitWorkStr(params interface{}) (bool, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func SubmitWork(params interface{}) (bool, error) {
+	//TODO implement me
+	panic("implement me")
 }
 
 // GetBlockReply struct
@@ -78,22 +112,11 @@ func New(rawURLs string, timeout time.Duration) (*Client, error) {
 }
 
 // GetWork func
-func (r *Client) GetWork() ([]string, error) {
-	rpcResp, err := r.doPost("eth_getWork", []string{}, 73)
-	var reply []string
-	if err != nil {
-		return reply, err
-	}
-	if rpcResp.Error != nil {
-		return reply, errors.New("[JSON-RPC] " + rpcResp.Error["message"].(string))
-	}
-	err = json.Unmarshal(*rpcResp.Result, &reply)
-	return reply, err
-}
 
 // SubmitWork func
-func (r *Client) SubmitWork(params interface{}) (bool, error) {
-	rpcResp, err := r.doPost("eth_submitWork", params, 73)
+func (r *Client) SubmitWork(params []interface{}) (bool, error) {
+	fmt.Printf("Params: %v\n", params)
+	rpcResp, err := r.doPost("eth_submitWork", params, 1)
 	var result bool
 	if err != nil {
 		log.Warn("[JSON-RPC] Submit work error", "error", err.Error())
@@ -109,11 +132,46 @@ func (r *Client) SubmitWork(params interface{}) (bool, error) {
 		return false, errors.New("[JSON-RPC] " + "rejected without reason")
 	}
 	return result, nil
+	//paramStrings := make([]string, len(params))
+	//for i, param := range params {
+	//	switch v := param.(type) {
+	//	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+	//		paramStrings[i] = fmt.Sprintf("%x", v)
+	//	case string:
+	//		paramStrings[i] = v
+	//	case common.Hash:
+	//		paramStrings[i] = v.Hex()
+	//	default:
+	//		paramStrings[i] = fmt.Sprintf("%x", v)
+	//	}
+	//}
+	//nonce := paramStrings[0]
+	//blockHash := paramStrings[1]
+	//mixHash := paramStrings[2]
+	//getWorkInfo := RpcInfo{Method: "eth_submitWork", Params: []string{nonce, blockHash, mixHash}, Id: 1, Jsonrpc: "2.0"}
+	//fmt.Println("Submit work:", getWorkInfo.Params)
+	//getWorkInfoBuffs, _ := json.Marshal(getWorkInfo)
+	//
+	//rpcUrl := "http://213.22.47.84:8545"
+	//req, err := http.NewRequest("POST", rpcUrl, bytes.NewBuffer(getWorkInfoBuffs))
+	//req.Header.Set("Content-Type", "application/json")
+	//
+	//client := &http.Client{}
+	//resp, err := client.Do(req)
+	//if err != nil {
+	//	log.Error("error", err)
+	//}
+	//defer resp.Body.Close()
+	//body, _ := ioutil.ReadAll(resp.Body)
+	//
+	//fmt.Println("Submit reback", string(body))
+	//
+	//return false, nil
 }
 
 // SubmitHashrate func
 func (r *Client) SubmitHashrate(params interface{}) (bool, error) {
-	rpcResp, err := r.doPost("eth_submitHashrate", params, 73)
+	rpcResp, err := r.doPost("eth_submitHashrate", params, 1)
 	var result bool
 	if err != nil {
 		return false, nil
@@ -150,7 +208,7 @@ func (r *Client) doPost(method string, params interface{}, id uint64) (JSONRpcRe
 
 	var rpcResp JSONRpcResp
 
-	jsonReq := map[string]interface{}{"jsonrpc": "2.0", "id": id, "method": method, "params": params}
+	jsonReq := map[string]interface{}{"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
 
 	data, _ := json.Marshal(jsonReq)
 	req, err := http.NewRequest("POST", r.URL.String(), bytes.NewBuffer(data))
@@ -223,4 +281,16 @@ func (r *Client) markAlive() {
 		r.successRate = 0
 	}
 	r.Unlock()
+}
+func (r *Client) GetWork() ([]string, error) {
+	rpcResp, err := r.doPost("eth_getWork", []string{}, 73)
+	var reply []string
+	if err != nil {
+		return reply, err
+	}
+	if rpcResp.Error != nil {
+		return reply, errors.New("[JSON-RPC] " + rpcResp.Error["message"].(string))
+	}
+	err = json.Unmarshal(*rpcResp.Result, &reply)
+	return reply, err
 }

@@ -2,7 +2,6 @@
 // source: cl/kernel1.cl
 package cl
 
-
 import (
 	"os"
 	"time"
@@ -13,11 +12,9 @@ var _bindataClKernel1Cl = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\xdc\x
 func bindataClKernel1ClBytes() ([]byte, error) {
 	return bindataRead(
 		_bindataClKernel1Cl,
-		"cl/kernel1.cl",
+		"kernel1.cl",
 	)
 }
-
-
 
 func bindataClKernel1Cl() (*asset, error) {
 	bytes, err := bindataClKernel1ClBytes()
@@ -26,15 +23,14 @@ func bindataClKernel1Cl() (*asset, error) {
 	}
 
 	info := bindataFileInfo{
-		name: "cl/kernel1.cl",
-		size: 15241,
+		name:        "kernel1.cl",
+		size:        15241,
 		md5checksum: "",
-		mode: os.FileMode(420),
-		modTime: time.Unix(1646260731, 0),
+		mode:        os.FileMode(420),
+		modTime:     time.Unix(1646260731, 0),
 	}
 
 	a := &asset{bytes: bytes, info: info}
 
 	return a, nil
 }
-

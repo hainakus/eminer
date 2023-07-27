@@ -20,7 +20,7 @@ package ethash
 import (
 	"errors"
 	"fmt"
-	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/hainakus/go-rethereum/consensus"
 	"math"
 	"math/big"
 	"math/rand"
@@ -35,9 +35,9 @@ import (
 	"unsafe"
 
 	"github.com/edsrzf/mmap-go"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/metrics"
-	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/hainakus/go-rethereum/log"
+	"github.com/hainakus/go-rethereum/metrics"
+	"github.com/hainakus/go-rethereum/rpc"
 	"github.com/hashicorp/golang-lru/simplelru"
 )
 
@@ -197,7 +197,7 @@ func (lru *lru) get(epoch uint64) (item, future interface{}) {
 		lru.cache.Add(epoch, item)
 	}
 	// Update the 'future item' if epoch is larger than previously seen.
-	if epoch < maxEpoch-1 && lru.future < epoch+1 {
+	if epoch < 60-1 && lru.future < epoch+1 {
 		log.Trace("Requiring new future ethash "+lru.what, "epoch", epoch+1)
 		future = lru.new(epoch + 1)
 		lru.future = epoch + 1
@@ -282,6 +282,7 @@ func (c *cache) finalizer() {
 	}
 }
 
+// dataset wraps an ethash dataset with some metadata to allow easier concurrent use.
 // dataset wraps an ethash dataset with some metadata to allow easier concurrent use.
 type dataset struct {
 	epoch   uint64    // Epoch for which this cache is relevant

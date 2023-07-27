@@ -8,23 +8,27 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"github.com/hainakus/eminer/adl"
-	"github.com/hainakus/eminer/counter"
-	"github.com/hainakus/eminer/ethash/gcn"
-	"hainakus/eminer/nvml"
-	_ "hainakus/eminer/nvml"
+	"golang.org/x/crypto/sha3"
 	"math"
 	"math/big"
 	mrand "math/rand"
+	"os"
+	"os/user"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
 	"unsafe"
 
-	"github.com/ethash/go-opencl/cl"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/log"
+	"github.com/hainakus/eminer/counter"
+	"github.com/hainakus/eminer/ethash/cl"
+	clbin "github.com/hainakus/eminer/ethash/cl"
+	"github.com/hainakus/eminer/ethash/gcn"
+	"github.com/hainakus/eminer/nvml"
+	"github.com/hainakus/go-rethereum/common"
+	"github.com/hainakus/go-rethereum/crypto"
+	"github.com/hainakus/go-rethereum/log"
 	"github.com/hako/durafmt"
 	metrics "github.com/rcrowley/go-metrics"
 )
@@ -183,6 +187,26 @@ func NewCL(deviceIds []int, workerName string, binary bool, version string) *Ope
 
 	return miner
 }
+func InitConfig(currConfig *Config) {
+	home := os.Getenv("HOME")
+	if home == "" {
+		if user, err := user.Current(); err == nil {
+			home = user.HomeDir
+		}
+	}
+	if runtime.GOOS == "darwin" {
+		currConfig.DatasetDir = filepath.Join(home, "Library", "Ethash-B3")
+	} else if runtime.GOOS == "windows" {
+		localappdata := os.Getenv("LOCALAPPDATA")
+		if localappdata != "" {
+			currConfig.DatasetDir = filepath.Join(localappdata, "Ethash-B3")
+		} else {
+			currConfig.DatasetDir = filepath.Join(home, "AppData", "Local", "Ethash-B3")
+		}
+	} else {
+		currConfig.DatasetDir = filepath.Join(home, ".ethash-B3")
+	}
+}
 
 // InitCL func
 func (c *OpenCLMiner) InitCL() error {
@@ -209,10 +233,10 @@ func (c *OpenCLMiner) InitCL() error {
 	}
 
 	blockNum := c.Work.BlockNumberU64()
-	var emptyConfig Config
-	var emptySlice []string
-	pow := New(emptyConfig, emptySlice, false, 6)
-	//pow.dataset(blockNum) // generates DAG on CPU if we don't have it
+
+	pow := New(Config{"", 3, 0, false, "", 1, 0, false, ModeNormal, nil}, nil, true, globalThreads)
+
+	//pow.dataset(blockNum, false) // generates DAG on CPU if we don't have it
 	pow.cache(blockNum) // and cache
 
 	c.ethash = pow
@@ -303,9 +327,6 @@ func (c *OpenCLMiner) initCLDevice(idx, deviceID int, device *cl.Device) error {
 	}
 
 	var name string
-	if amdGPU {
-		name = adl.Name(int(busNumber))
-	}
 
 	if len(name) <= 0 {
 		name = device.Name()
@@ -542,7 +563,6 @@ func (c *OpenCLMiner) generateDAGOnDevice(d *OpenCLDevice) error {
 	}
 
 	blockNum := c.Work.BlockNumberU64()
-	cache := c.ethash.cache(blockNum)
 
 	dagSize1 := c.dagSize / 2
 	dagSize2 := c.dagSize / 2
@@ -565,12 +585,6 @@ func (c *OpenCLMiner) generateDAGOnDevice(d *OpenCLDevice) error {
 	cacheBuf, err := d.ctx.CreateEmptyBuffer(cl.MemReadOnly, c.cacheSize)
 	if err != nil {
 		return fmt.Errorf("cache buffer err: %v", err)
-	}
-
-	cachePtr := unsafe.Pointer(&cache.cache)
-	_, err = d.queue.EnqueueWriteBuffer(cacheBuf, true, 0, c.cacheSize, cachePtr, nil)
-	if err != nil {
-		return fmt.Errorf("writing to cache buf failed: %v", err)
 	}
 
 	d.queue.Finish()
@@ -753,13 +767,6 @@ func (c *OpenCLMiner) CmpDagSize(work *Work) bool {
 
 	return newDagSize != c.dagSize
 }
-func convertUint64ToUint32(input []uint64) []uint32 {
-	output := make([]uint32, 0, len(input))
-	for _, v := range input {
-		output = append(output, uint32(v))
-	}
-	return output
-}
 
 // Seal hashes on GPU
 func (c *OpenCLMiner) Seal(stop <-chan struct{}, deviceID int, onSolutionFound func(common.Hash, uint64, []byte, uint64)) error {
@@ -936,37 +943,20 @@ func (c *OpenCLMiner) Seal(stop <-chan struct{}, deviceID int, onSolutionFound f
 					goto done
 				}
 
-				c.RLock()
-				if !bytes.Equal(s.headerHash.Bytes(), c.Work.HeaderHash.Bytes()) {
-					d.logger.Warn("Stale solution found", "worker", s.bufIndex,
-						"hash", s.headerHash.TerminalString())
-
-					d.roundCount.Empty()
-
-					c.RUnlock()
-					goto done
-				}
-				c.RUnlock()
-
 				go func(results *searchResults, startNonce uint64, hh common.Hash) {
 					for i := uint32(0); i < results.count; i++ {
 						upperNonce := uint64(results.rslt[i].gid)
 						checkNonce := startNonce + upperNonce
 						if checkNonce != 0 {
 							mixDigest := make([]byte, common.HashLength)
+
 							for z, val := range results.rslt[i].mix {
 								binary.LittleEndian.PutUint32(mixDigest[z*4:], val)
 							}
 
 							number := c.Work.BlockNumberU64()
-							cache2 := c.ethash.cache(number)
-							mix, _ := hashimotoLight(c.dagSize, cache2.cache, hh.Bytes(), checkNonce)
-
-							if !bytes.Equal(mix, mixDigest) {
-								d.logger.Error("Solution found but not verified", "worker", s.bufIndex,
-									"hash", hh.TerminalString())
-								continue
-							}
+							cache := c.ethash.cache(number)
+							digest, _ := hashimotoFull(cache.cache, hh.Bytes(), checkNonce)
 
 							seed := make([]byte, 40)
 							copy(seed, hh[:])
@@ -989,7 +979,9 @@ func (c *OpenCLMiner) Seal(stop <-chan struct{}, deviceID int, onSolutionFound f
 									roundVariance = roundCount * 100 / c.Work.Difficulty().Uint64()
 								}
 
-								go onSolutionFound(hh, checkNonce, mixDigest, roundVariance)
+								// Calculate mix digest through iterations of the mix function
+
+								go onSolutionFound(hh, checkNonce, digest, roundVariance)
 
 								d.roundCount.Empty()
 
@@ -1091,6 +1083,14 @@ func (c *OpenCLMiner) WorkChanged() {
 		d.workCh <- struct{}{}
 	}
 }
+func mix(headerHash, mixHash []byte, nonce uint64) []byte {
+	mixData := append(headerHash, mixHash...)
+	nonceBytes := make([]byte, 8)
+	binary.LittleEndian.PutUint64(nonceBytes, nonce)
+	mixData = append(mixData, nonceBytes...)
+	hash := sha3.Sum256(mixData)
+	return hash[:]
+}
 
 // GetHashrate for device
 func (c *OpenCLMiner) GetHashrate(deviceID int) float64 {
@@ -1140,10 +1140,7 @@ func (c *OpenCLMiner) TotalHashRate1() (total float64) {
 func (c *OpenCLMiner) Poll() {
 	for _, d := range c.devices {
 		if d.amdGPU {
-			d.temperature.Update(adl.Temperature(d.busNumber))
-			d.fanpercent.Update(adl.FanPercent(d.busNumber))
-			d.engineclock.Update(int64(adl.EngineClock(d.busNumber)))
-			d.memoryclock.Update(int64(adl.MemoryClock(d.busNumber)))
+
 		} else if d.nvidiaGPU {
 			d.temperature.Update(nvml.Temperature(d.busNumber))
 			d.fanpercent.Update(nvml.FanPercent(d.busNumber))
@@ -1155,48 +1152,42 @@ func (c *OpenCLMiner) Poll() {
 
 // SetFanPercent set fan speed percent for selected devices
 func (c *OpenCLMiner) SetFanPercent(percents []int) {
-	for i, p := range percents {
+	for i := range percents {
 		if i > len(c.devices)-1 {
 			break
 		}
 
 		d := c.devices[i]
 		if d.amdGPU {
-			if err := adl.FanSetPercent(d.busNumber, uint32(p)); err != nil {
-				d.logger.Error("Fan set error", "error", err.Error(), "bus", d.busNumber)
-			}
+
 		}
 	}
 }
 
 // SetEngineClock set engine clock for selected devices
 func (c *OpenCLMiner) SetEngineClock(values []int) {
-	for i, v := range values {
+	for i := range values {
 		if i > len(c.devices)-1 {
 			break
 		}
 
 		d := c.devices[i]
 		if d.amdGPU {
-			if err := adl.EngineSetClock(d.busNumber, int(v)); err != nil {
-				d.logger.Error("Engine clock set error", "error", err.Error(), "bus", d.busNumber)
-			}
+
 		}
 	}
 }
 
 // SetMemoryClock set memory clock for selected devices
 func (c *OpenCLMiner) SetMemoryClock(values []int) {
-	for i, v := range values {
+	for i := range values {
 		if i > len(c.devices)-1 {
 			break
 		}
 
 		d := c.devices[i]
 		if d.amdGPU {
-			if err := adl.MemorySetClock(d.busNumber, int(v)); err != nil {
-				d.logger.Error("Memory clock set error", "error", err.Error(), "bus", d.busNumber)
-			}
+
 		}
 	}
 }
@@ -1289,7 +1280,7 @@ func replaceWords(text string, kvs map[string]string) string {
 }
 
 func kernelSource(name string) string {
-	asset, err := gcn.Asset("cl/" + name)
+	asset, err := clbin.Asset("cl/" + name)
 	if err != nil {
 		return ""
 	}
