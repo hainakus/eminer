@@ -58,9 +58,9 @@ func farmMineByDevice(miner *ethash.OpenCLMiner, deviceID int, c client.Client, 
 
 					// Output the final mix digest
 
-					blockNonce := nonce
+					blockNonce := types.EncodeNonce(nonce)
 					mixDigest, _ := common.BytesToHash(digest).MarshalText()
-					ri := blockNonce
+					ri, _ := blockNonce.MarshalText()
 					h, _ := hh.MarshalText()
 
 					params := []string{

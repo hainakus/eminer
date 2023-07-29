@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/hainakus/eminer/util"
 	"io/ioutil"
@@ -118,7 +117,7 @@ type result struct {
 func (r *Client) SubmitWork(params []string) (bool, error) {
 	nonce := params[0]
 	blockHash := params[2]
-	mixHash, _ := common.Hash{}.MarshalText()
+	mixHash := params[1]
 	getWorkInfo := RpcInfo{Method: "eth_submitWork", Params: []string{nonce, blockHash, string(mixHash)}, Id: 1, Jsonrpc: "2.0"}
 	fmt.Println("Submit work:", getWorkInfo.Params)
 	getWorkInfoBuffs, _ := json.Marshal(getWorkInfo)

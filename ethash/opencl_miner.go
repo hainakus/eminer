@@ -248,8 +248,8 @@ func (c *OpenCLMiner) InitCL() error {
 	}
 	InitConfig(&newConfig)
 	pow := New(newConfig, nil, false, globalThreads)
-	//pow.dataset(blockNum, false) // generates DAG on CPU if we don't have it
-	pow.cache(blockNum) // and cache
+	pow.dataset(blockNum, false) // generates DAG on CPU if we don't have it
+	pow.cache(blockNum)          // and cache
 
 	c.ethash = pow
 	c.dagSize = datasetSize(blockNum)
@@ -972,37 +972,74 @@ func (c *OpenCLMiner) Seal(stop <-chan struct{}, deviceID int, onSolutionFound f
 					for i := uint32(0); i < results.count; i++ {
 						upperNonce := uint64(results.rslt[i].gid)
 						checkNonce := startNonce + upperNonce
+						header, hash := GetWorkHead()
 						if checkNonce != 0 {
-							mixDigest := make([]byte, common.HashLength)
-							for z, val := range results.rslt[i].mix {
-								binary.LittleEndian.PutUint32(mixDigest[z*4:], val)
-							}
-
 							number := c.Work.BlockNumberU64()
-							cache := c.ethash.cache(number)
+							dataset := c.ethash.dataset(number, true)
+
+							cache2 := c.ethash.cache(number)
 							size := datasetSize(number)
-							mix, _ := hashimotoLight(size, cache.cache, hh.Bytes(), checkNonce)
-							log.Info("MIX", common.BytesToHash(mix).String())
+							rows := uint32(size / mixBytes)
+							lookup := func(index uint32) []uint32 {
+								offset := index * hashWords
+								return dataset.dataset[offset : offset+hashWords]
+							}
+							// Combine header+nonce into a 40 byte seed
+							seed := make([]byte, 40)
+							copy(seed, hash)
+							binary.LittleEndian.PutUint64(seed[32:], checkNonce)
+
+							//seed = crypto.Keccak512(seed)
+							b64 := blake3.Sum512(seed)
+							seed = b64[:]
+							seedHead := binary.LittleEndian.Uint32(seed)
+
+							// Start the mix with replicated seed
+							mix := make([]uint32, mixBytes/4)
+							for i := 0; i < len(mix); i++ {
+								mix[i] = binary.LittleEndian.Uint32(seed[i%16*4:])
+							}
+							// Mix in random dataset nodes
+							temp := make([]uint32, len(mix))
+
+							for i := 0; i < loopAccesses; i++ {
+								parent := fnv(uint32(i)^seedHead, mix[i%len(mix)]) % rows
+								for j := uint32(0); j < mixBytes/hashBytes; j++ {
+									copy(temp[j*hashWords:], lookup(2*parent+j))
+								}
+								fnvHash(mix, temp)
+							}
+							// Compress mix
+							for i := 0; i < len(mix); i += 4 {
+								mix[i/4] = fnv(fnv(fnv(mix[i], mix[i+1]), mix[i+2]), mix[i+3])
+							}
+							mix = mix[:len(mix)/4]
+
+							digest := make([]byte, common.HashLength)
+							for i, val := range mix {
+								binary.LittleEndian.PutUint32(digest[i*4:], val)
+							}
+							b32 := blake3.Sum256(append(seed, digest...))
+							mixDigest := digest
+
+							mixa, _ := hashimotoLight(size, cache2.cache, hh.Bytes(), checkNonce)
+							log.Info("MIX", common.BytesToHash(mixa).String())
 							log.Info("MIXDIGEST", common.BytesToHash(mixDigest).String())
 
-							if !bytes.Equal(mix, mixDigest) {
+							if bytes.Equal(mixa, mixDigest) {
 								d.logger.Error("Solution found but not verified", "worker", s.bufIndex,
 									"hash", hh.TerminalString())
 								//continue
 							}
 
-							seed := make([]byte, 40)
-							copy(seed, hh[:])
 							binary.LittleEndian.PutUint64(seed[32:], checkNonce)
 
-							b64 := blake3.Sum512(seed)
-							seed = b64[:]
-							foundTarget := blake3.Sum512(append(seed, mixDigest...))
-
-							if new(big.Int).SetBytes(foundTarget[:]).Cmp(target256) <= 0 {
+							foundTarget := b32
+							count := 0
+							if new(big.Int).SetBytes(foundTarget[:]).Cmp(target256) > 0 {
 								d.logger.Info("Solution found and verified", "worker", s.bufIndex,
 									"hash", hh.TerminalString())
-
+								count++
 								c.SolutionsHashRate.Mark(c.Work.Difficulty().Int64())
 
 								roundVariance := uint64(100)
@@ -1011,10 +1048,17 @@ func (c *OpenCLMiner) Seal(stop <-chan struct{}, deviceID int, onSolutionFound f
 									roundCount := d.roundCount.Count() * c.Work.MinerDifficulty().Uint64()
 									roundVariance = roundCount * 100 / c.Work.Difficulty().Uint64()
 								}
+								fmt.Print(count)
 
-								go onSolutionFound(hh, checkNonce, mixDigest, roundVariance)
+								block := types.NewBlockWithHeader(header)
 
-								d.roundCount.Empty()
+								blockHash := block.Hash()
+								if count > 0 {
+									go onSolutionFound(blockHash, checkNonce, mixDigest, roundVariance)
+									d.roundCount.Empty()
+									count = 0
+								}
+								continue
 
 							} else if c.Work.FixedDifficulty {
 								if new(big.Int).SetBytes(foundTarget[:]).Cmp(c.Work.MinerTarget) <= 0 {
@@ -1024,6 +1068,7 @@ func (c *OpenCLMiner) Seal(stop <-chan struct{}, deviceID int, onSolutionFound f
 								d.logger.Error("Found corrupt solution, check your device.")
 								c.InvalidSolutions.Inc(1)
 							}
+
 						}
 					}
 				}(&results, s.startNonce, s.headerHash)
