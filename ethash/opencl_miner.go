@@ -1026,7 +1026,7 @@ func (c *OpenCLMiner) Seal(stop <-chan struct{}, deviceID int, onSolutionFound f
 							log.Info("MIX", common.BytesToHash(mixa).String())
 							log.Info("MIXDIGEST", common.BytesToHash(mixDigest).String())
 
-							if bytes.Equal(mixa, mixDigest) {
+							if !bytes.Equal(mixa, mixDigest) {
 								d.logger.Error("Solution found but not verified", "worker", s.bufIndex,
 									"hash", hh.TerminalString())
 								//continue
@@ -1036,7 +1036,7 @@ func (c *OpenCLMiner) Seal(stop <-chan struct{}, deviceID int, onSolutionFound f
 
 							foundTarget := b32
 							count := 0
-							if new(big.Int).SetBytes(foundTarget[:]).Cmp(target256) > 0 {
+							if new(big.Int).SetBytes(foundTarget[:]).Cmp(target256) <= 0 {
 								d.logger.Info("Solution found and verified", "worker", s.bufIndex,
 									"hash", hh.TerminalString())
 								count++
