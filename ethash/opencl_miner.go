@@ -977,7 +977,7 @@ func (c *OpenCLMiner) Seal(stop <-chan struct{}, deviceID int, onSolutionFound f
 							number := c.Work.BlockNumberU64()
 							dataset := c.ethash.dataset(number, true)
 
-							cache2 := c.ethash.cache(number)
+							//cache2 := c.ethash.cache(number)
 							size := datasetSize(number)
 							rows := uint32(size / mixBytes)
 							lookup := func(index uint32) []uint32 {
@@ -1022,7 +1022,7 @@ func (c *OpenCLMiner) Seal(stop <-chan struct{}, deviceID int, onSolutionFound f
 							b32 := blake3.Sum256(append(seed, digest...))
 							mixDigest := digest
 
-							mixa, _ := hashimotoLight(size, cache2.cache, hh.Bytes(), checkNonce)
+							mixa, _ := hashimoto(hh.Bytes(), checkNonce, size, lookup)
 							log.Info("MIX", common.BytesToHash(mixa).String())
 							log.Info("MIXDIGEST", common.BytesToHash(mixDigest).String())
 
