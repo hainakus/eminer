@@ -6,10 +6,8 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/hainakus/go-rethereum/common"
+	"github.com/ethereum/go-ethereum/common"
 )
-
-var MaxUint256 = new(big.Int).Exp(big.NewInt(2), big.NewInt(256), big.NewInt(0))
 
 // Work struct
 type Work struct {

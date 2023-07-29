@@ -5,7 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/hainakus/go-rethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/hainakus/eminer/util"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -14,11 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/hainakus/go-rethereum/log"
-)
-
-var (
-	rpcUrl string = "http://213.22.47.84:8545"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 type RpcReback struct {
@@ -112,61 +109,33 @@ func New(rawURLs string, timeout time.Duration) (*Client, error) {
 }
 
 // GetWork func
+type result struct {
+	result bool
+}
 
 // SubmitWork func
-func (r *Client) SubmitWork(params []interface{}) (bool, error) {
-	fmt.Printf("Params: %v\n", params)
-	rpcResp, err := r.doPost("eth_submitWork", params, 1)
-	var result bool
+func (r *Client) SubmitWork(params []string) (bool, error) {
+
+	getWorkInfo := RpcInfo{Method: "eth_submitWork", Params: []string{params[0], params[1], params[2]}, Id: 1, Jsonrpc: "2.0"}
+	fmt.Println("Submit work:", getWorkInfo.Params)
+	getWorkInfoBuffs, _ := json.Marshal(getWorkInfo)
+
+	rpcUrl := r.URL.String()
+	req, err := http.NewRequest("POST", rpcUrl, bytes.NewBuffer(getWorkInfoBuffs))
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
 	if err != nil {
-		log.Warn("[JSON-RPC] Submit work error", "error", err.Error())
-		return true, nil //network error never rejected
+		log.Error("error", err)
 	}
+	defer resp.Body.Close()
+	body, _ := ioutil.ReadAll(resp.Body)
 
-	if rpcResp.Error != nil {
-		return false, errors.New("[JSON-RPC] " + rpcResp.Error["message"].(string))
-	}
-
-	json.Unmarshal(*rpcResp.Result, &result)
-	if !result {
-		return false, errors.New("[JSON-RPC] " + "rejected without reason")
-	}
-	return result, nil
-	//paramStrings := make([]string, len(params))
-	//for i, param := range params {
-	//	switch v := param.(type) {
-	//	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
-	//		paramStrings[i] = fmt.Sprintf("%x", v)
-	//	case string:
-	//		paramStrings[i] = v
-	//	case common.Hash:
-	//		paramStrings[i] = v.Hex()
-	//	default:
-	//		paramStrings[i] = fmt.Sprintf("%x", v)
-	//	}
-	//}
-	//nonce := paramStrings[0]
-	//blockHash := paramStrings[1]
-	//mixHash := paramStrings[2]
-	//getWorkInfo := RpcInfo{Method: "eth_submitWork", Params: []string{nonce, blockHash, mixHash}, Id: 1, Jsonrpc: "2.0"}
-	//fmt.Println("Submit work:", getWorkInfo.Params)
-	//getWorkInfoBuffs, _ := json.Marshal(getWorkInfo)
-	//
-	//rpcUrl := "http://213.22.47.84:8545"
-	//req, err := http.NewRequest("POST", rpcUrl, bytes.NewBuffer(getWorkInfoBuffs))
-	//req.Header.Set("Content-Type", "application/json")
-	//
-	//client := &http.Client{}
-	//resp, err := client.Do(req)
-	//if err != nil {
-	//	log.Error("error", err)
-	//}
-	//defer resp.Body.Close()
-	//body, _ := ioutil.ReadAll(resp.Body)
-	//
-	//fmt.Println("Submit reback", string(body))
-	//
-	//return false, nil
+	fmt.Println("Submit reback", string(body))
+	var response result
+	json.Unmarshal(body, &response)
+	return response.result, nil
 }
 
 // SubmitHashrate func
@@ -244,10 +213,8 @@ func (r *Client) doPost(method string, params interface{}, id uint64) (JSONRpcRe
 
 // Check func
 func (r *Client) Check() (bool, error) {
-	_, err := r.GetWork()
-	if err != nil {
-		return false, errors.New("[JSON-RPC] " + err.Error())
-	}
+	_, _ = r.GetWork()
+
 	r.markAlive()
 	return !r.Sick(), nil
 }
@@ -282,15 +249,26 @@ func (r *Client) markAlive() {
 	}
 	r.Unlock()
 }
-func (r *Client) GetWork() ([]string, error) {
-	rpcResp, err := r.doPost("eth_getWork", []string{}, 73)
-	var reply []string
-	if err != nil {
-		return reply, err
-	}
-	if rpcResp.Error != nil {
-		return reply, errors.New("[JSON-RPC] " + rpcResp.Error["message"].(string))
-	}
-	err = json.Unmarshal(*rpcResp.Result, &reply)
-	return reply, err
+func (r *Client) GetWork() (*types.Header, string) {
+	getWorkInfo := RpcInfo{Method: "eth_getWork", Params: []string{}, Id: 1, Jsonrpc: "2.0"}
+	getWorkInfoBuffs, _ := json.Marshal(getWorkInfo)
+
+	rpcUrl := r.URL
+	req, _ := http.NewRequest("POST", rpcUrl.String(), bytes.NewBuffer(getWorkInfoBuffs))
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, _ := client.Do(req)
+
+	defer resp.Body.Close()
+	body, _ := ioutil.ReadAll(resp.Body)
+	workReback := new(RpcReback)
+
+	json.Unmarshal(body, workReback)
+
+	newHeader := new(types.Header)
+	newHeader.Number = util.HexToBig(workReback.Result[3])
+	newHeader.Difficulty = util.TargetHexToDiff(workReback.Result[2])
+
+	return newHeader, workReback.Result[0]
 }

@@ -30,10 +30,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hainakus/go-rethereum/common"
-	"github.com/hainakus/go-rethereum/common/hexutil"
-	"github.com/hainakus/go-rethereum/consensus"
-	"github.com/hainakus/go-rethereum/core/types"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/core/types"
 )
 
 const (
@@ -72,12 +72,12 @@ func (ethash *Ethash) Seal(chain consensus.ChainHeaderReader, block *types.Block
 		threads = runtime.NumCPU()
 	}
 	if threads < 0 {
-		threads = 0 // Allows disabling local mining without extra logic around local/remote
+		threads = -1 // Allows disabling local mining without extra logic around local/remote
 	}
 	// Push new work to remote sealer
-	//if ethash.remote != nil {
-	//	ethash.remote.workCh <- &sealTask{block: block, results: results}
-	//}
+	if ethash.remote != nil {
+		ethash.remote.workCh <- &sealTask{block: block, results: results}
+	}
 	var (
 		pend   sync.WaitGroup
 		locals = make(chan *types.Block)
@@ -389,7 +389,7 @@ func (s *remoteSealer) submitWork(nonce types.BlockNonce, mixDigest common.Hash,
 	// Make sure the work submitted is present
 	block := s.works[sealhash]
 	if block == nil {
-		s.ethash.config.Log.Warn("Work submitted but none pending", "sealhash", sealhash, "curnumber", s.currentBlock.NumberU64())
+		s.ethash.config.Log.Warn("Work subm!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!", "sealhash", sealhash, "curnumber", s.currentBlock.NumberU64())
 		return false
 	}
 	// Verify the correctness of submitted result.

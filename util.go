@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/hainakus/eminer/ethash"
-	common2 "github.com/hainakus/go-rethereum/common"
+	common2 "github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/rlp"
 	"golang.org/x/crypto/sha3"
 	"hash"
+	"lukechampine.com/blake3"
 	"math/big"
 	"math/rand"
 	"strconv"
@@ -16,9 +18,11 @@ import (
 	"time"
 
 	"github.com/ethash/go-opencl/cl"
+	"github.com/ethereum/go-ethereum/common"
+
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/hainakus/eminer/client"
-	"github.com/hainakus/go-rethereum/common"
-	"github.com/hainakus/go-rethereum/log"
+	"github.com/hainakus/eminer/ethash"
 )
 
 const (
@@ -174,25 +178,54 @@ func notifyWork(result *json.RawMessage) (*ethash.Work, error) {
 func getWork(c client.Client) (*ethash.Work, error) {
 	var blockNumber int64
 
-	getWork, err := c.GetWork()
-	if err != nil {
-		return nil, err
-	}
+	header, _ := c.GetWork()
 
-	seedHash := common.BytesToHash(common.FromHex(getWork[1]))
+	blockNumber = header.Number.Int64()
+	seedHash, _ := GetSeedHash(uint64(blockNumber))
+	sealHash := SealHash(header)
+	w := ethash.NewWork(blockNumber, sealHash,
+		common.BytesToHash(seedHash), new(big.Int).Div(new(big.Int).Exp(big.NewInt(2), big.NewInt(256), big.NewInt(0)), header.Difficulty), *flagfixediff)
 
-	blockNumber, err = Number(seedHash)
-	if err != nil {
-		return nil, err
-	}
-
-	w := ethash.NewWork(blockNumber, common.BytesToHash(common.FromHex(getWork[0])),
-		seedHash, new(big.Int).SetBytes(common.FromHex(getWork[2])), *flagfixediff)
-
-	if len(getWork) > 4 { //extraNonce
-		w.ExtraNonce = new(big.Int).SetBytes(common.FromHex(getWork[3])).Uint64()
-		w.SizeBits, _ = strconv.Atoi(getWork[4])
-	}
-
+	//log.Info(strconv.FormatInt(blockNumber, 10))
 	return w, nil
+}
+func SealHash(header *types.Header) (hash common.Hash) {
+	hasher := sha3.NewLegacyKeccak256()
+
+	enc := []interface{}{
+		header.ParentHash,
+		header.UncleHash,
+		header.Coinbase,
+		header.Root,
+		header.TxHash,
+		header.ReceiptHash,
+		header.Bloom,
+		header.Difficulty,
+		header.Number,
+		header.GasLimit,
+		header.GasUsed,
+		header.Time,
+		header.Extra,
+	}
+	if header.BaseFee != nil {
+		enc = append(enc, header.BaseFee)
+	}
+	rlp.Encode(hasher, enc)
+	hasher.Sum(hash[:0])
+	return hash
+}
+func GetSeedHash(blockNum uint64) ([]byte, error) {
+	if blockNum >= epochLength*2048 {
+		return nil, fmt.Errorf("block number too high, limit is %d", epochLength*2048)
+	}
+	sh := makeSeedHash(blockNum / epochLength)
+	return sh[:], nil
+}
+
+func makeSeedHash(epoch uint64) (sh common.Hash) {
+	for ; epoch > 0; epoch-- {
+		b64 := blake3.Sum512(sh[:])
+		sh = common.BytesToHash(b64[:])
+	}
+	return sh
 }

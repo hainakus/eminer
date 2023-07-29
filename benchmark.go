@@ -6,10 +6,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/hainakus/eminer/ethash"
-	"github.com/hainakus/go-rethereum/common"
-	"github.com/hainakus/go-rethereum/common/hexutil"
-	"github.com/hainakus/go-rethereum/log"
 )
 
 // Benchmark mode
@@ -78,9 +77,9 @@ func Benchmark(stopChan chan struct{}) {
 		wg.Add(1)
 		defer wg.Done()
 
-		onSolutionFound := func(hh common.Hash, nonce uint64, digest []byte, roundVariance uint64) {
-			if nonce != 0 {
-				log.Info("Solution accepted", "hash", hh.TerminalString(), "digest", common.Bytes2Hex(digest), "nonce", hexutil.Uint64(nonce).String())
+		onSolutionFound := func(nonce string, hh string, digest string, seal string, roundVariance uint64) {
+			if nonce != "0" {
+				log.Info("Solution accepted", "hash", hh, "digest", digest, "nonce", nonce)
 
 				miner.FoundSolutions.Update(int64(roundVariance))
 				if *flagfixediff {
@@ -105,7 +104,7 @@ func Benchmark(stopChan chan struct{}) {
 			}
 		}()
 
-		miner.Seal(stopSeal, 1, onSolutionFound)
+		miner.Seal(stopSeal, deviceID, onSolutionFound)
 	}
 
 	log.Info("Starting benchmark", "seconds for", 600)

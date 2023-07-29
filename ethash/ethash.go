@@ -20,7 +20,7 @@ package ethash
 import (
 	"errors"
 	"fmt"
-	"github.com/hainakus/go-rethereum/consensus"
+	"github.com/ethereum/go-ethereum/consensus"
 	"math"
 	"math/big"
 	"math/rand"
@@ -35,13 +35,17 @@ import (
 	"unsafe"
 
 	"github.com/edsrzf/mmap-go"
-	"github.com/hainakus/go-rethereum/log"
-	"github.com/hainakus/go-rethereum/metrics"
-	"github.com/hainakus/go-rethereum/rpc"
+	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/metrics"
+	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/hashicorp/golang-lru/simplelru"
 )
 
 var ErrInvalidDumpMagic = errors.New("invalid dump magic")
+var (
+	// MaxUint256 is a big integer representing 2^256-1
+	MaxUint256 = new(big.Int).Exp(big.NewInt(2), big.NewInt(256), big.NewInt(0))
+)
 
 const globalThreads = 12
 

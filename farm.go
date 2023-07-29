@@ -2,22 +2,23 @@ package main
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"github.com/goccy/go-json"
 	"github.com/hainakus/eminer/util"
+	"golang.org/x/crypto/sha3"
 	"io/ioutil"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 
+	_ "github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/hainakus/eminer/client"
 	"github.com/hainakus/eminer/ethash"
 	"github.com/hainakus/eminer/rpc"
-	"github.com/hainakus/go-rethereum/common"
-	_ "github.com/hainakus/go-rethereum/common/hexutil"
-	"github.com/hainakus/go-rethereum/core/types"
-	"github.com/hainakus/go-rethereum/log"
 )
 
 type Work struct {
@@ -30,6 +31,17 @@ type BlockData struct {
 	// Add other fields of the block if needed
 }
 
+const mixRounds = 64 // Number of mix rounds (simplified example)
+
+// Simple mixing function
+func mix(headerHash, mixHash []byte, nonce uint64) []byte {
+	mixData := append(headerHash, mixHash...)
+	nonceBytes := make([]byte, 8)
+	binary.LittleEndian.PutUint64(nonceBytes, nonce)
+	mixData = append(mixData, nonceBytes...)
+	hash := sha3.Sum256(mixData)
+	return hash[:]
+}
 func farmMineByDevice(miner *ethash.OpenCLMiner, deviceID int, c client.Client, stopChan <-chan struct{}) {
 	stopSealFunc := make(chan struct{})
 	stopSeal := make(chan struct{})
@@ -41,20 +53,27 @@ func farmMineByDevice(miner *ethash.OpenCLMiner, deviceID int, c client.Client, 
 				return
 			case <-time.After(time.Second):
 
-				onSolutionFound := func(hh common.Hash, nonce uint64, digest []byte, roundVariance uint64) {
-					blockNonce := types.EncodeNonce(nonce)
+				onSolutionFound := func(nonce string, hh string, digest string, sealer string, roundVariance uint64) {
 
-					ri, _ := blockNonce.MarshalText()
-					h, _ := hh.MarshalText()
-					r, _ := common.BytesToHash(digest).MarshalText()
-					params := []interface{}{
+					// Output the final mix digest
+
+					blockNonce := nonce
+
+					ri := blockNonce
+					h := hh
+
+					params := []string{
 						string(ri),
+
+						digest,
 						string(h),
-						string(r),
 					}
+
 					log.Error("err", string(ri))
 					log.Error("err", string(h))
-					log.Error("err", string(r))
+					log.Error("err", digest)
+					log.Error("err", sealer)
+
 					miner.FoundSolutions.Update(int64(roundVariance))
 					if *flagfixediff {
 						formatter := func(x int64) string {
@@ -66,13 +85,8 @@ func farmMineByDevice(miner *ethash.OpenCLMiner, deviceID int, c client.Client, 
 							"max", formatter(miner.FoundSolutions.Max()))
 					}
 
-					res, err := c.SubmitWork(params)
-					if res && err == nil {
-						log.Info("Solution accepted by network", "hash", hh.TerminalString())
-					} else {
-						miner.RejectedSolutions.Inc(1)
-						log.Warn("Solution not accepted by network", "hash", hh.TerminalString(), "error", err.Error())
-					}
+					c.SubmitWork(params)
+
 				}
 
 				miner.Seal(stopSeal, deviceID, onSolutionFound)
@@ -98,7 +112,7 @@ func GetWorkHead() (*types.Header, string) {
 	getWorkInfo := RpcInfo{Method: "eth_getWork", Params: []string{}, Id: 1, Jsonrpc: "2.0"}
 	getWorkInfoBuffs, _ := json.Marshal(getWorkInfo)
 
-	rpcUrl := "http://213.22.47.84:8545"
+	rpcUrl := "http://127.0.0.1:8546"
 	req, err := http.NewRequest("POST", rpcUrl, bytes.NewBuffer(getWorkInfoBuffs))
 	req.Header.Set("Content-Type", "application/json")
 
@@ -132,7 +146,7 @@ func SubmitWork(nonce string, blockHash string, mixHash string) {
 	log.Info("Submit work:", getWorkInfo.Params)
 	getWorkInfoBuffs, _ := json.Marshal(getWorkInfo)
 
-	rpcUrl := "http://213.22.47.84:8545"
+	rpcUrl := "http://127.0.0.1:8546"
 	req, err := http.NewRequest("POST", rpcUrl, bytes.NewBuffer(getWorkInfoBuffs))
 	req.Header.Set("Content-Type", "application/json")
 
@@ -342,9 +356,6 @@ func Farm(stopChan <-chan struct{}) {
 
 			miner.Resume()
 
-			farmMineByDevice(miner, 1, rc, stopFarmMine)
-			farmMineByDevice(miner, 2, rc, stopFarmMine)
-			farmMineByDevice(miner, 3, rc, stopFarmMine)
 		}
 	}
 }

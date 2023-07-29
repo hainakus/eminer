@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/gin-gonic/gin"
 	"github.com/hainakus/eminer/ethash"
 	"github.com/hainakus/eminer/http/metricstat"
-	"github.com/hainakus/go-rethereum/log"
 	metrics "github.com/rcrowley/go-metrics"
 )
 

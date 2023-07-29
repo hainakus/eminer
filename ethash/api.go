@@ -20,9 +20,9 @@ import (
 	"errors"
 	"log"
 
-	"github.com/hainakus/go-rethereum/common"
-	"github.com/hainakus/go-rethereum/common/hexutil"
-	"github.com/hainakus/go-rethereum/core/types"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/core/types"
 )
 
 var errEthashStopped = errors.New("ethash stopped")

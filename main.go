@@ -11,7 +11,7 @@ import (
 	_ "text/tabwriter"
 	"time"
 
-	"github.com/hainakus/go-rethereum/log"
+	"github.com/ethereum/go-ethereum/log"
 	_ "github.com/passkeyra/go-opencl/opencl"
 
 	"github.com/hainakus/eminer/http"
@@ -24,7 +24,7 @@ var (
 	flaglistdevices = flag.Bool("L", false, "List GPU devices")
 	flagbenchmark   = flag.Int("B", -1, "Benchmark mode, set device id for benchmark")
 	flagmine        = flag.String("M", "all", "Run mine on selected devices, use comma for multiple devices")
-	flagfarm        = flag.String("F", "http://213.22.47.84:8545", "Farm mode with the work server at URL, use comma for multiple rpc server")
+	flagfarm        = flag.String("F", "http://192.168.1.180:8546", "Farm mode with the work server at URL, use comma for multiple rpc server")
 	flagstratum     = flag.String("S", "", "Stratum mode, use comma for multiple stratum server (example: `<host>:<port>` for nicehash or other stratum servers stratum+tcp://<host>:<port>)")
 	flagworkername  = flag.String("N", "", "Name of your rig, the name will be use on dashboard, json-api, stathat. Some pools require rig name with extra parameter, this name will be send the pools.")
 	flagusername    = flag.String("U", "", "Username for stratum server")

@@ -8,10 +8,17 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/rlp"
+	_ "github.com/hainakus/eminer/rpc"
+	"github.com/hainakus/eminer/util"
 	"golang.org/x/crypto/sha3"
+	"io/ioutil"
+	"lukechampine.com/blake3"
 	"math"
 	"math/big"
 	mrand "math/rand"
+	"net/http"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -21,14 +28,13 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/hainakus/eminer/counter"
 	"github.com/hainakus/eminer/ethash/cl"
 	clbin "github.com/hainakus/eminer/ethash/cl"
 	"github.com/hainakus/eminer/ethash/gcn"
 	"github.com/hainakus/eminer/nvml"
-	"github.com/hainakus/go-rethereum/common"
-	"github.com/hainakus/go-rethereum/crypto"
-	"github.com/hainakus/go-rethereum/log"
 	"github.com/hako/durafmt"
 	metrics "github.com/rcrowley/go-metrics"
 )
@@ -233,11 +239,19 @@ func (c *OpenCLMiner) InitCL() error {
 	}
 
 	blockNum := c.Work.BlockNumberU64()
-
-	pow := New(Config{"", 3, 0, false, "", 1, 0, false, ModeNormal, nil}, nil, true, globalThreads)
-
-	//pow.dataset(blockNum, false) // generates DAG on CPU if we don't have it
-	pow.cache(blockNum) // and cache
+	newConfig := Config{
+		CacheDir:         "ethash",
+		CachesInMem:      2,
+		CachesOnDisk:     3,
+		CachesLockMmap:   false,
+		DatasetsInMem:    1,
+		DatasetsOnDisk:   2,
+		DatasetsLockMmap: false,
+	}
+	InitConfig(&newConfig)
+	pow := New(newConfig, nil, false, globalThreads)
+	pow.dataset(blockNum, false) // generates DAG on CPU if we don't have it
+	pow.cache(blockNum)          // and cache
 
 	c.ethash = pow
 	c.dagSize = datasetSize(blockNum)
@@ -761,15 +775,50 @@ func (c *OpenCLMiner) Release(deviceID int) {
 	}
 }
 
+type WorkBlock struct {
+	Header *types.Header
+	Hash   string
+}
+
 // CmpDagSize based on block number
 func (c *OpenCLMiner) CmpDagSize(work *Work) bool {
 	newDagSize := datasetSize(work.BlockNumberU64())
 
 	return newDagSize != c.dagSize
 }
+func mixFn(headerHash, mixHash []byte, nonce uint64) []byte {
+	mixData := append(headerHash, mixHash...)
+	nonceBytes := make([]byte, 8)
+	binary.LittleEndian.PutUint64(nonceBytes, nonce)
+	mixData = append(mixData, nonceBytes...)
+	hash := sha3.Sum256(mixData)
+	return hash[:]
+}
+
+type Counter struct {
+	mu    sync.Mutex
+	value int
+}
+
+func (c *Counter) Increment() {
+	c.mu.Lock()
+	c.value++
+	c.mu.Unlock()
+}
+func (c *Counter) SetValue(v int) {
+	c.mu.Lock()
+	c.value = v
+	c.mu.Unlock()
+}
+
+func (c *Counter) GetValue() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.value
+}
 
 // Seal hashes on GPU
-func (c *OpenCLMiner) Seal(stop <-chan struct{}, deviceID int, onSolutionFound func(common.Hash, uint64, []byte, uint64)) error {
+func (c *OpenCLMiner) Seal(stop <-chan struct{}, deviceID int, onSolutionFound func(nonce string, hh string, digest string, seal string, roundVariance uint64)) error {
 
 	//may stop requested
 	time.Sleep(1 * time.Millisecond)
@@ -944,8 +993,25 @@ func (c *OpenCLMiner) Seal(stop <-chan struct{}, deviceID int, onSolutionFound f
 				}
 
 				go func(results *searchResults, startNonce uint64, hh common.Hash) {
+					header, hash := GetWorkHead()
+					// Replace with the appropriate Ethereum node URL
+					const mixRounds = 64 // Number of mix rounds (simplified example)
+
+					// Replace with the block number of interest
+
+					var (
+						target = new(big.Int).Div(two256, c.Work.Difficulty())
+					)
+					// Create a new Ethereum client
+					var (
+						powBuffer = new(big.Int)
+					)
+					currentBlock := new(WorkBlock)
+					counter := &Counter{}
+					counter.SetValue(0)
 					for i := uint32(0); i < results.count; i++ {
 						upperNonce := uint64(results.rslt[i].gid)
+
 						checkNonce := startNonce + upperNonce
 						if checkNonce != 0 {
 							mixDigest := make([]byte, common.HashLength)
@@ -953,46 +1019,50 @@ func (c *OpenCLMiner) Seal(stop <-chan struct{}, deviceID int, onSolutionFound f
 							for z, val := range results.rslt[i].mix {
 								binary.LittleEndian.PutUint32(mixDigest[z*4:], val)
 							}
-
-							number := c.Work.BlockNumberU64()
-							cache := c.ethash.cache(number)
-							digest, _ := hashimotoFull(cache.cache, hh.Bytes(), checkNonce)
-
 							seed := make([]byte, 40)
-							copy(seed, hh[:])
+							copy(seed, hash)
 							binary.LittleEndian.PutUint64(seed[32:], checkNonce)
 
-							seed = crypto.Keccak512(seed)
+							//seed = crypto.Keccak512(seed)
+							b64 := blake3.Sum512(seed)
+							seed = b64[:]
+							number := c.Work.BlockNumberU64()
 
-							foundTarget := crypto.Keccak256(append(seed, mixDigest...))
+							cache := c.ethash.dataset(number, false)
+							digest, result := hashimotoFull(cache.dataset, SealHash(header).Bytes(), checkNonce)
+							block := types.NewBlockWithHeader(header)
 
-							if new(big.Int).SetBytes(foundTarget).Cmp(target256) <= 0 {
-								d.logger.Info("Solution found and verified", "worker", s.bufIndex,
-									"hash", hh.TerminalString())
+							mixe := mixFn(headerHash.Bytes(), mixDigest, checkNonce)
+							log.Info("MIX", block.MixDigest().String())
+							log.Info("MIX", common.BytesToHash(mixDigest).String())
+							log.Info("MIX", common.BytesToHash(mixe).String())
+							log.Info("MIX", common.BytesToHash(digest).String())
+							fmt.Print("VERIFIED", powBuffer.SetBytes(result).Cmp(target) <= 0)
 
-								c.SolutionsHashRate.Mark(c.Work.Difficulty().Int64())
+							//target := new(big.Int).Div(two256, header.Difficulty)
+							//if new(big.Int).SetBytes(foundTarget[:]).Cmp(target) <= 0 {
+							d.logger.Info("Solution found and verified", "worker", s.bufIndex,
+								"hash", hh.String())
 
-								roundVariance := uint64(100)
-								if c.Work.FixedDifficulty {
-									d.roundCount.Put()
-									roundCount := d.roundCount.Count() * c.Work.MinerDifficulty().Uint64()
-									roundVariance = roundCount * 100 / c.Work.Difficulty().Uint64()
-								}
+							c.SolutionsHashRate.Mark(c.Work.Difficulty().Int64())
 
-								// Calculate mix digest through iterations of the mix function
-
-								go onSolutionFound(hh, checkNonce, digest, roundVariance)
-
-								d.roundCount.Empty()
-
-							} else if c.Work.FixedDifficulty {
-								if new(big.Int).SetBytes(foundTarget).Cmp(c.Work.MinerTarget) <= 0 {
-									d.roundCount.Put()
-								}
-							} else {
-								d.logger.Error("Found corrupt solution, check your device.")
-								c.InvalidSolutions.Inc(1)
+							roundVariance := uint64(100)
+							if c.Work.FixedDifficulty {
+								d.roundCount.Put()
+								roundCount := d.roundCount.Count() * c.Work.MinerDifficulty().Uint64()
+								roundVariance = roundCount * 100 / c.Work.Difficulty().Uint64()
 							}
+
+							nonce, _ := types.EncodeNonce(checkNonce).MarshalText()
+							mix, _ := common.BytesToHash(digest).MarshalText()
+							currentBlock.Hash = hash
+
+							log.Info(string(nonce), string(mix))
+
+							go onSolutionFound(string(nonce), currentBlock.Hash, string(mix), string(hh.String()), roundVariance)
+							counter.SetValue(0)
+							d.roundCount.Empty()
+
 						}
 					}
 				}(&results, s.startNonce, s.headerHash)
@@ -1083,14 +1153,6 @@ func (c *OpenCLMiner) WorkChanged() {
 		d.workCh <- struct{}{}
 	}
 }
-func mix(headerHash, mixHash []byte, nonce uint64) []byte {
-	mixData := append(headerHash, mixHash...)
-	nonceBytes := make([]byte, 8)
-	binary.LittleEndian.PutUint64(nonceBytes, nonce)
-	mixData = append(mixData, nonceBytes...)
-	hash := sha3.Sum256(mixData)
-	return hash[:]
-}
 
 // GetHashrate for device
 func (c *OpenCLMiner) GetHashrate(deviceID int) float64 {
@@ -1120,6 +1182,45 @@ func (c *OpenCLMiner) TotalHashRate() (total float64) {
 	}
 
 	return
+}
+
+type RpcReback struct {
+	Jsonrpc string   `json:"jsonrpc"`
+	Result  []string `json:"result"`
+	Id      int      `json:"id"`
+}
+
+type RpcInfo struct {
+	Method  string
+	Params  []string
+	Id      int
+	Jsonrpc string
+}
+
+func GetWorkHead() (*types.Header, string) {
+	getWorkInfo := RpcInfo{Method: "eth_getWork", Params: []string{}, Id: 1, Jsonrpc: "2.0"}
+	getWorkInfoBuffs, _ := json.Marshal(getWorkInfo)
+
+	rpcUrl := "http://127.0.0.1:8546"
+	req, err := http.NewRequest("POST", rpcUrl, bytes.NewBuffer(getWorkInfoBuffs))
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, ""
+	}
+	defer resp.Body.Close()
+	body, _ := ioutil.ReadAll(resp.Body)
+	workReback := new(RpcReback)
+
+	json.Unmarshal(body, workReback)
+
+	newHeader := new(types.Header)
+	newHeader.Number = util.HexToBig(workReback.Result[3])
+	newHeader.Difficulty = util.TargetHexToDiff(workReback.Result[2])
+
+	return newHeader, workReback.Result[0]
 }
 
 // TotalHashRateMean on all GPUs
@@ -1303,4 +1404,29 @@ func gcnSource(name string) ([]byte, error) {
 	}
 
 	return asset, nil
+}
+func SealHash(header *types.Header) (hash common.Hash) {
+	hasher := sha3.NewLegacyKeccak256()
+
+	enc := []interface{}{
+		header.ParentHash,
+		header.UncleHash,
+		header.Coinbase,
+		header.Root,
+		header.TxHash,
+		header.ReceiptHash,
+		header.Bloom,
+		header.Difficulty,
+		header.Number,
+		header.GasLimit,
+		header.GasUsed,
+		header.Time,
+		header.Extra,
+	}
+	if header.BaseFee != nil {
+		enc = append(enc, header.BaseFee)
+	}
+	rlp.Encode(hasher, enc)
+	hasher.Sum(hash[:0])
+	return hash
 }

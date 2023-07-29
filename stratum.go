@@ -1,7 +1,7 @@
 package main
 
 import (
-	"bytes"
+	_ "bytes"
 	"encoding/json"
 	"fmt"
 	"github.com/hainakus/eminer/stratum"
@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/hainakus/eminer/ethash"
-	"github.com/hainakus/go-rethereum/common/hexutil"
-	"github.com/hainakus/go-rethereum/log"
 )
 
 // Stratum mode
@@ -34,11 +34,6 @@ func Stratum(stopChan <-chan struct{}) {
 		log.Crit("Stratum server critical error", "error", err.Error())
 	}
 
-	w, err := getWork(sc)
-	if err != nil {
-		log.Crit(err.Error())
-	}
-
 	deviceIds := []int{}
 	if *flagmine == "all" {
 		deviceIds = getAllDevices()
@@ -49,7 +44,7 @@ func Stratum(stopChan <-chan struct{}) {
 	miner := ethash.NewCL(deviceIds, *flagworkername, *flaggcn, version)
 
 	miner.Lock()
-	miner.Work = w
+	miner.Work = nil
 	miner.Unlock()
 
 	if *flagkernel != "" {
@@ -116,17 +111,6 @@ func Stratum(stopChan <-chan struct{}) {
 					miner.Unlock()
 				}
 
-				if !bytes.Equal(wt.HeaderHash.Bytes(), miner.Work.HeaderHash.Bytes()) {
-					log.Info("Work changed, new work", "hash", wt.HeaderHash.TerminalString(), "difficulty", fmt.Sprintf("%.3f GH", float64(wt.Difficulty().Uint64())/1e9))
-					if miner.CmpDagSize(wt) {
-						log.Warn("DAG size changed, new DAG will be generate")
-						changeDAG <- struct{}{}
-					}
-					miner.Lock()
-					miner.Work = wt
-					miner.Unlock()
-				}
-
 				miner.WorkChanged()
 			}
 		}
@@ -179,9 +163,6 @@ func Stratum(stopChan <-chan struct{}) {
 		}
 	}
 
-	log.Info("New work from network", "hash", w.HeaderHash.TerminalString(), "difficulty", fmt.Sprintf("%.3f GH", float64(w.Difficulty().Uint64())/1e9))
-	log.Info("Starting mining process", "hash", miner.Work.HeaderHash.TerminalString())
-
 	var wg sync.WaitGroup
 	stopFarmMine := make(chan struct{}, len(deviceIds))
 	for _, deviceID := range deviceIds {
@@ -189,7 +170,7 @@ func Stratum(stopChan <-chan struct{}) {
 		go func(deviceID int) {
 			defer wg.Done()
 
-			farmMineByDevice(miner, deviceID, sc, stopFarmMine)
+			//farmMineByDevice(miner, deviceID, sc, stopFarmMine)
 		}(deviceID)
 	}
 

@@ -15,9 +15,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/hainakus/go-rethereum/common"
-	"github.com/hainakus/go-rethereum/core/types"
-	"github.com/hainakus/go-rethereum/log"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 // Client structure
@@ -63,7 +63,7 @@ type Client struct {
 	tls bool
 }
 
-func (c *Client) SubmitWork(params []interface{}) (bool, error) {
+func (c *Client) SubmitWork(params []string) (bool, error) {
 	//TODO implement me
 	panic("implement me")
 }
@@ -375,7 +375,7 @@ func (c *Client) Auth() error {
 }
 
 // GetWork from stratum server
-func (c *Client) GetWork() ([]string, error) {
+func (c *Client) GetWorkStr() ([]string, error) {
 	if c.mode != etherproxy {
 		return c.waitWorkFromStratum()
 	}
