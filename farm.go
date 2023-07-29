@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/goccy/go-json"
 	"github.com/hainakus/eminer/util"
-	"golang.org/x/crypto/sha3"
 	"io/ioutil"
+	"lukechampine.com/blake3"
 	"net/http"
 	"strings"
 	"sync"
@@ -39,7 +40,7 @@ func mix(headerHash, mixHash []byte, nonce uint64) []byte {
 	nonceBytes := make([]byte, 8)
 	binary.LittleEndian.PutUint64(nonceBytes, nonce)
 	mixData = append(mixData, nonceBytes...)
-	hash := sha3.Sum256(mixData)
+	hash := blake3.Sum256(mixData)
 	return hash[:]
 }
 func farmMineByDevice(miner *ethash.OpenCLMiner, deviceID int, c client.Client, stopChan <-chan struct{}) {
@@ -53,26 +54,25 @@ func farmMineByDevice(miner *ethash.OpenCLMiner, deviceID int, c client.Client, 
 				return
 			case <-time.After(time.Second):
 
-				onSolutionFound := func(nonce string, hh string, digest string, sealer string, roundVariance uint64) {
+				onSolutionFound := func(hh common.Hash, nonce uint64, digest []byte, roundVariance uint64) {
 
 					// Output the final mix digest
 
 					blockNonce := nonce
-
+					mixDigest, _ := common.BytesToHash(digest).MarshalText()
 					ri := blockNonce
-					h := hh
+					h, _ := hh.MarshalText()
 
 					params := []string{
 						string(ri),
 
-						digest,
+						string(mixDigest),
 						string(h),
 					}
 
 					log.Error("err", string(ri))
 					log.Error("err", string(h))
 					log.Error("err", digest)
-					log.Error("err", sealer)
 
 					miner.FoundSolutions.Update(int64(roundVariance))
 					if *flagfixediff {

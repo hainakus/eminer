@@ -9,10 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/rlp"
-	_ "github.com/hainakus/eminer/rpc"
 	"github.com/hainakus/eminer/util"
-	"golang.org/x/crypto/sha3"
 	"io/ioutil"
 	"lukechampine.com/blake3"
 	"math"
@@ -28,12 +25,13 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/log"
 	"github.com/hainakus/eminer/counter"
-	"github.com/hainakus/eminer/ethash/cl"
 	clbin "github.com/hainakus/eminer/ethash/cl"
 	"github.com/hainakus/eminer/ethash/gcn"
+
+	"github.com/ethash/go-opencl/cl"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/hainakus/eminer/nvml"
 	"github.com/hako/durafmt"
 	metrics "github.com/rcrowley/go-metrics"
@@ -250,8 +248,8 @@ func (c *OpenCLMiner) InitCL() error {
 	}
 	InitConfig(&newConfig)
 	pow := New(newConfig, nil, false, globalThreads)
-	pow.dataset(blockNum, false) // generates DAG on CPU if we don't have it
-	pow.cache(blockNum)          // and cache
+	//pow.dataset(blockNum, false) // generates DAG on CPU if we don't have it
+	pow.cache(blockNum) // and cache
 
 	c.ethash = pow
 	c.dagSize = datasetSize(blockNum)
@@ -577,6 +575,7 @@ func (c *OpenCLMiner) generateDAGOnDevice(d *OpenCLDevice) error {
 	}
 
 	blockNum := c.Work.BlockNumberU64()
+	c.ethash.cache(blockNum)
 
 	dagSize1 := c.dagSize / 2
 	dagSize2 := c.dagSize / 2
@@ -775,50 +774,15 @@ func (c *OpenCLMiner) Release(deviceID int) {
 	}
 }
 
-type WorkBlock struct {
-	Header *types.Header
-	Hash   string
-}
-
 // CmpDagSize based on block number
 func (c *OpenCLMiner) CmpDagSize(work *Work) bool {
 	newDagSize := datasetSize(work.BlockNumberU64())
 
 	return newDagSize != c.dagSize
 }
-func mixFn(headerHash, mixHash []byte, nonce uint64) []byte {
-	mixData := append(headerHash, mixHash...)
-	nonceBytes := make([]byte, 8)
-	binary.LittleEndian.PutUint64(nonceBytes, nonce)
-	mixData = append(mixData, nonceBytes...)
-	hash := sha3.Sum256(mixData)
-	return hash[:]
-}
-
-type Counter struct {
-	mu    sync.Mutex
-	value int
-}
-
-func (c *Counter) Increment() {
-	c.mu.Lock()
-	c.value++
-	c.mu.Unlock()
-}
-func (c *Counter) SetValue(v int) {
-	c.mu.Lock()
-	c.value = v
-	c.mu.Unlock()
-}
-
-func (c *Counter) GetValue() int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.value
-}
 
 // Seal hashes on GPU
-func (c *OpenCLMiner) Seal(stop <-chan struct{}, deviceID int, onSolutionFound func(nonce string, hh string, digest string, seal string, roundVariance uint64)) error {
+func (c *OpenCLMiner) Seal(stop <-chan struct{}, deviceID int, onSolutionFound func(common.Hash, uint64, []byte, uint64)) error {
 
 	//may stop requested
 	time.Sleep(1 * time.Millisecond)
@@ -992,77 +956,74 @@ func (c *OpenCLMiner) Seal(stop <-chan struct{}, deviceID int, onSolutionFound f
 					goto done
 				}
 
+				c.RLock()
+				if !bytes.Equal(s.headerHash.Bytes(), c.Work.HeaderHash.Bytes()) {
+					d.logger.Warn("Stale solution found", "worker", s.bufIndex,
+						"hash", s.headerHash.TerminalString())
+
+					d.roundCount.Empty()
+
+					c.RUnlock()
+					goto done
+				}
+				c.RUnlock()
+
 				go func(results *searchResults, startNonce uint64, hh common.Hash) {
-					header, hash := GetWorkHead()
-					// Replace with the appropriate Ethereum node URL
-					const mixRounds = 64 // Number of mix rounds (simplified example)
-
-					// Replace with the block number of interest
-
-					var (
-						target = new(big.Int).Div(two256, c.Work.Difficulty())
-					)
-					// Create a new Ethereum client
-					var (
-						powBuffer = new(big.Int)
-					)
-					currentBlock := new(WorkBlock)
-					counter := &Counter{}
-					counter.SetValue(0)
 					for i := uint32(0); i < results.count; i++ {
 						upperNonce := uint64(results.rslt[i].gid)
-
 						checkNonce := startNonce + upperNonce
 						if checkNonce != 0 {
 							mixDigest := make([]byte, common.HashLength)
-
 							for z, val := range results.rslt[i].mix {
 								binary.LittleEndian.PutUint32(mixDigest[z*4:], val)
 							}
-							seed := make([]byte, 40)
-							copy(seed, hash)
-							binary.LittleEndian.PutUint64(seed[32:], checkNonce)
 
-							//seed = crypto.Keccak512(seed)
-							b64 := blake3.Sum512(seed)
-							seed = b64[:]
 							number := c.Work.BlockNumberU64()
+							cache := c.ethash.cache(number)
+							size := datasetSize(number)
+							mix, _ := hashimotoLight(size, cache.cache, hh.Bytes(), checkNonce)
+							log.Info("MIX", common.BytesToHash(mix).String())
+							log.Info("MIXDIGEST", common.BytesToHash(mixDigest).String())
 
-							cache := c.ethash.dataset(number, false)
-							digest, result := hashimotoFull(cache.dataset, SealHash(header).Bytes(), checkNonce)
-							block := types.NewBlockWithHeader(header)
-
-							mixe := mixFn(headerHash.Bytes(), mixDigest, checkNonce)
-							log.Info("MIX", block.MixDigest().String())
-							log.Info("MIX", common.BytesToHash(mixDigest).String())
-							log.Info("MIX", common.BytesToHash(mixe).String())
-							log.Info("MIX", common.BytesToHash(digest).String())
-							fmt.Print("VERIFIED", powBuffer.SetBytes(result).Cmp(target) <= 0)
-
-							//target := new(big.Int).Div(two256, header.Difficulty)
-							//if new(big.Int).SetBytes(foundTarget[:]).Cmp(target) <= 0 {
-							d.logger.Info("Solution found and verified", "worker", s.bufIndex,
-								"hash", hh.String())
-
-							c.SolutionsHashRate.Mark(c.Work.Difficulty().Int64())
-
-							roundVariance := uint64(100)
-							if c.Work.FixedDifficulty {
-								d.roundCount.Put()
-								roundCount := d.roundCount.Count() * c.Work.MinerDifficulty().Uint64()
-								roundVariance = roundCount * 100 / c.Work.Difficulty().Uint64()
+							if !bytes.Equal(mix, mixDigest) {
+								d.logger.Error("Solution found but not verified", "worker", s.bufIndex,
+									"hash", hh.TerminalString())
+								//continue
 							}
 
-							nonce, _ := types.EncodeNonce(checkNonce).MarshalText()
-							mix, _ := common.BytesToHash(digest).MarshalText()
-							currentBlock.Hash = hash
+							seed := make([]byte, 40)
+							copy(seed, hh[:])
+							binary.LittleEndian.PutUint64(seed[32:], checkNonce)
 
-							log.Info(string(nonce), string(mix))
+							b64 := blake3.Sum512(seed)
+							seed = b64[:]
+							foundTarget := blake3.Sum512(append(seed, mixDigest...))
 
-							go onSolutionFound(string(nonce), currentBlock.Hash, string(mix), string(hh.String()), roundVariance)
-							counter.SetValue(0)
-							d.roundCount.Empty()
+							if new(big.Int).SetBytes(foundTarget[:]).Cmp(target256) <= 0 {
+								d.logger.Info("Solution found and verified", "worker", s.bufIndex,
+									"hash", hh.TerminalString())
 
+								c.SolutionsHashRate.Mark(c.Work.Difficulty().Int64())
+
+								roundVariance := uint64(100)
+								if c.Work.FixedDifficulty {
+									d.roundCount.Put()
+									roundCount := d.roundCount.Count() * c.Work.MinerDifficulty().Uint64()
+									roundVariance = roundCount * 100 / c.Work.Difficulty().Uint64()
+								}
+
+								go onSolutionFound(hh, checkNonce, mixDigest, roundVariance)
+
+								d.roundCount.Empty()
+
+							} else if c.Work.FixedDifficulty {
+								if new(big.Int).SetBytes(foundTarget[:]).Cmp(c.Work.MinerTarget) <= 0 {
+									d.roundCount.Put()
+								}
+							} else {
+								d.logger.Error("Found corrupt solution, check your device.")
+								c.InvalidSolutions.Inc(1)
+							}
 						}
 					}
 				}(&results, s.startNonce, s.headerHash)
@@ -1404,29 +1365,4 @@ func gcnSource(name string) ([]byte, error) {
 	}
 
 	return asset, nil
-}
-func SealHash(header *types.Header) (hash common.Hash) {
-	hasher := sha3.NewLegacyKeccak256()
-
-	enc := []interface{}{
-		header.ParentHash,
-		header.UncleHash,
-		header.Coinbase,
-		header.Root,
-		header.TxHash,
-		header.ReceiptHash,
-		header.Bloom,
-		header.Difficulty,
-		header.Number,
-		header.GasLimit,
-		header.GasUsed,
-		header.Time,
-		header.Extra,
-	}
-	if header.BaseFee != nil {
-		enc = append(enc, header.BaseFee)
-	}
-	rlp.Encode(hasher, enc)
-	hasher.Sum(hash[:0])
-	return hash
 }
