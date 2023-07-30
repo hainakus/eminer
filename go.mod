@@ -3,15 +3,12 @@ module github.com/hainakus/eminer
 go 1.14
 
 require (
-	github.com/Gustav-Simonsson/go-opencl v0.0.0-20150630110553-593e01cfc4f3 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
+	github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be
 	github.com/deckarep/golang-set v1.8.0
-	github.com/denisbrodbeck/machineid v1.0.1 // indirect
 	github.com/edsrzf/mmap-go v1.0.0
 	github.com/ethash/go-opencl v0.0.0-20170924192419-f1ea00997e28
 	github.com/ethereum/go-ethereum v1.10.26
-	github.com/ethereumproject/ethash v0.0.0-20180109211943-65a5b25efc27
-	github.com/ethereumproject/go-ethereum v5.5.2+incompatible // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/gin-gonic/gin v1.8.1
 	github.com/go-kit/kit v0.9.0 // indirect
@@ -25,10 +22,9 @@ require (
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/hako/durafmt v0.0.0-20210608085754-5c1018a4e16b
 	github.com/hashicorp/golang-lru v0.5.5-0.20210104140557-80c98217689d
-	github.com/holiman/uint256 v1.2.2-0.20230321075855-87b91420868c // indirect
 	github.com/klauspost/cpuid v1.2.1 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
-	github.com/mattn/go-colorable v0.1.13 // indirect
+	github.com/mattn/go-isatty v0.0.16 // indirect
 	github.com/onsi/ginkgo v1.16.5 // indirect
 	github.com/onsi/gomega v1.18.1 // indirect
 	github.com/passkeyra/go-opencl v0.0.0-20220406222639-89fc1cb60037
@@ -39,6 +35,5 @@ require (
 	golang.org/x/crypto v0.11.0
 	golang.org/x/sys v0.10.0
 	google.golang.org/protobuf v1.28.1 // indirect
-	gopkg.in/karalabe/cookiejar.v2 v2.0.0-20150724131613-8dcd6a7f4951 // indirect
 	lukechampine.com/blake3 v1.2.1
 )

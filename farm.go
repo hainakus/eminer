@@ -54,26 +54,26 @@ func farmMineByDevice(miner *ethash.OpenCLMiner, deviceID int, c client.Client, 
 				return
 			case <-time.After(time.Second):
 
-				onSolutionFound := func(hh common.Hash, nonce uint64, digest []byte, roundVariance uint64) {
+				onSolutionFound := func(hh string, nonce string, digest []byte, roundVariance uint64) {
 
 					// Output the final mix digest
 
-					blockNonce := types.EncodeNonce(nonce)
+					blockNonce := nonce
 					mixDigest, _ := common.BytesToHash(digest).MarshalText()
-					ri, _ := blockNonce.MarshalText()
-					h, _ := hh.MarshalText()
+					ri := blockNonce
+					h := hh
 
 					params := []string{
 						string(ri),
 
-						string(mixDigest),
 						string(h),
+						string(mixDigest),
 					}
 
 					log.Error("err", string(ri))
-					log.Error("err", string(h))
-					log.Error("err", digest)
 
+					log.Error("err", string(mixDigest))
+					log.Error("err", string(h))
 					miner.FoundSolutions.Update(int64(roundVariance))
 					if *flagfixediff {
 						formatter := func(x int64) string {

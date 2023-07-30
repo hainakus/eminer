@@ -77,8 +77,8 @@ func Benchmark(stopChan chan struct{}) {
 		wg.Add(1)
 		defer wg.Done()
 
-		onSolutionFound := func(hh common.Hash, nonce uint64, digest []byte, roundVariance uint64) {
-			if nonce != 0 {
+		onSolutionFound := func(hh string, nonce string, digest []byte, roundVariance uint64) {
+			if nonce != "0" {
 				log.Info("Solution accepted", "hash", hh, "digest", digest, "nonce", nonce)
 
 				miner.FoundSolutions.Update(int64(roundVariance))

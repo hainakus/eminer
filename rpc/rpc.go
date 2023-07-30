@@ -116,8 +116,8 @@ type result struct {
 // SubmitWork func
 func (r *Client) SubmitWork(params []string) (bool, error) {
 	nonce := params[0]
-	blockHash := params[2]
-	mixHash := params[1]
+	blockHash := params[1]
+	mixHash := params[2]
 	getWorkInfo := RpcInfo{Method: "eth_submitWork", Params: []string{nonce, blockHash, string(mixHash)}, Id: 1, Jsonrpc: "2.0"}
 	fmt.Println("Submit work:", getWorkInfo.Params)
 	getWorkInfoBuffs, _ := json.Marshal(getWorkInfo)
