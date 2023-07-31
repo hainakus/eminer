@@ -63,12 +63,12 @@ func farmMineByDevice(miner *ethash.OpenCLMiner, deviceID int, c client.Client, 
 					ri := blockNonce
 					h := hh
 
-					params := []string{
-						string(ri),
-
-						string(h),
-						string(mixDigest),
-					}
+					//params := []string{
+					//	string(ri),
+					//
+					//	string(h),
+					//	string(mixDigest),
+					//}
 
 					log.Error("err", string(ri))
 
@@ -85,7 +85,7 @@ func farmMineByDevice(miner *ethash.OpenCLMiner, deviceID int, c client.Client, 
 							"max", formatter(miner.FoundSolutions.Max()))
 					}
 
-					c.SubmitWork(params)
+					SubmitWork(string(ri), string(h), string(mixDigest))
 
 				}
 
@@ -112,7 +112,8 @@ func GetWorkHead() (*types.Header, string) {
 	getWorkInfo := RpcInfo{Method: "eth_getWork", Params: []string{}, Id: 1, Jsonrpc: "2.0"}
 	getWorkInfoBuffs, _ := json.Marshal(getWorkInfo)
 
-	rpcUrl := "http://127.0.0.1:8546"
+	rpcUrl := "http://213.22.47.84:8545"
+
 	req, err := http.NewRequest("POST", rpcUrl, bytes.NewBuffer(getWorkInfoBuffs))
 	req.Header.Set("Content-Type", "application/json")
 

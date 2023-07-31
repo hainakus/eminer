@@ -53,7 +53,7 @@ func argToIntSlice(arg string) (devices []int) {
 func getAllDevices() (devices []int) {
 	platforms, err := cl.GetPlatforms()
 	if err != nil {
-		log.Crit(fmt.Sprintf("Plaform error: %v\nCheck your OpenCL installation and then run eminer -L", err))
+		log.Crit(fmt.Sprintf("Plaform error: %v\nCheck your OpenCL installation and then run unknownminer -L", err))
 		return
 	}
 
@@ -146,7 +146,7 @@ func Number(seedHash common.Hash) (int64, error) {
 	return number(seedHash)
 }
 func notifyWork(result *json.RawMessage) (*ethash.Work, error) {
-	var blockNumber int64
+	var _ int64
 	var getWork []string
 	err := json.Unmarshal(*result, &getWork)
 	if err != nil {
@@ -157,15 +157,13 @@ func notifyWork(result *json.RawMessage) (*ethash.Work, error) {
 		return nil, errors.New("result short")
 	}
 
-	seedHash := common.BytesToHash(common.FromHex(getWork[1]))
-
-	blockNumber, err = Number(seedHash)
 	if err != nil {
 		return nil, err
 	}
-
-	w := ethash.NewWork(blockNumber, common.Hash(common2.BytesToHash(common.FromHex(getWork[0]))),
-		seedHash, new(big.Int).SetBytes(common.FromHex(getWork[2])), *flagfixediff)
+	header, _ := GetWorkHead()
+	seedHash, _ := GetSeedHash(header.Number.Uint64())
+	w := ethash.NewWork(header.Number.Int64(), header.Hash(),
+		common.BytesToHash(seedHash), new(big.Int).SetBytes(header.Difficulty.Bytes()), *flagfixediff)
 
 	if len(getWork) > 4 { //extraNonce
 		w.ExtraNonce = new(big.Int).SetBytes(common.FromHex(getWork[3])).Uint64()
@@ -178,7 +176,7 @@ func notifyWork(result *json.RawMessage) (*ethash.Work, error) {
 func getWork(c client.Client) (*ethash.Work, error) {
 	var blockNumber int64
 
-	header, _ := c.GetWork()
+	header, _ := GetWorkHead()
 
 	blockNumber = header.Number.Int64()
 	seedHash, _ := GetSeedHash(uint64(blockNumber))

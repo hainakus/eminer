@@ -2,7 +2,6 @@ package ethash
 
 import (
 	"encoding/json"
-
 	"math/big"
 	"time"
 
@@ -27,14 +26,17 @@ type Work struct {
 	Time time.Time
 }
 
+var MaxUint256 = new(big.Int).Exp(big.NewInt(2), big.NewInt(256), nil)
+
 // NewWork func
 func NewWork(number int64, hh, sh common.Hash, target *big.Int, fixedDiff bool) *Work {
+	header, _ := GetWorkHead()
 	return &Work{
-		BlockNumber:     big.NewInt(int64(number)),
-		HeaderHash:      hh,
+		BlockNumber:     header.Number,
+		HeaderHash:      header.Hash(),
 		SeedHash:        sh,
-		Target256:       target,
-		MinerTarget:     new(big.Int).Div(MaxUint256, new(big.Int).SetInt64(5e8)), //500MH
+		Target256:       new(big.Int).Div(two256, header.Difficulty),
+		MinerTarget:     new(big.Int).Div(two256, new(big.Int).SetInt64(5e8)), //500MH
 		FixedDifficulty: fixedDiff,
 		Time:            time.Now(),
 	}

@@ -63,6 +63,11 @@ type Client struct {
 	tls bool
 }
 
+func (c *Client) GetWork() (*types.Header, string) {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (c *Client) SubmitWork(params []string) (bool, error) {
 	//TODO implement me
 	panic("implement me")
@@ -280,7 +285,7 @@ func (c *Client) Subscribe() error {
 		return c.Auth()
 	}
 
-	params := []string{"eminer/" + c.minerVersion, "EthereumStratum/1.0.0"}
+	params := []string{"unknownminer/" + c.minerVersion, "EthereumStratum/1.0.0"}
 
 	var result []*json.RawMessage
 	resp, err := c.request("mining.subscribe", params)

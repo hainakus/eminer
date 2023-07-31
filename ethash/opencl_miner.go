@@ -4,17 +4,18 @@ package ethash
 
 import (
 	"bytes"
+	"context"
 	crand "crypto/rand"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"github.com/common-nighthawk/go-figure"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/hainakus/eminer/counter"
 	clbin "github.com/hainakus/eminer/ethash/cl"
 	"github.com/hainakus/eminer/ethash/gcn"
-	"github.com/hainakus/eminer/rpc"
 	"github.com/hainakus/eminer/util"
 	"golang.org/x/crypto/sha3"
 	"io/ioutil"
@@ -224,7 +225,7 @@ func InitConfig(currConfig *Config) {
 func (c *OpenCLMiner) InitCL() error {
 	platforms, err := cl.GetPlatforms()
 	if err != nil {
-		return fmt.Errorf("plaform error: %v\ncheck your OpenCL installation and drivers and then run eminer -L", err)
+		return fmt.Errorf("plaform error: %v\ncheck your OpenCL installation and drivers and then run unknownminer -L", err)
 	}
 
 	var devices []*cl.Device
@@ -244,7 +245,8 @@ func (c *OpenCLMiner) InitCL() error {
 		}
 	}
 
-	blockNum := c.Work.BlockNumberU64()
+	header, _ := GetWorkHead()
+	blockNum := header.Number.Uint64()
 	newConfig := Config{
 		CacheDir:         "ethash",
 		CachesInMem:      2,
@@ -255,7 +257,7 @@ func (c *OpenCLMiner) InitCL() error {
 		DatasetsLockMmap: false,
 	}
 	InitConfig(&newConfig)
-	pow := New(newConfig, nil, false, globalThreads)
+	pow := sharedEthash
 	pow.dataset(blockNum, false) // generates DAG on CPU if we don't have it
 	pow.cache(blockNum)          // and cache
 
@@ -270,7 +272,7 @@ func (c *OpenCLMiner) InitCL() error {
 
 	for i, id := range c.deviceIds {
 		if id > len(devices)-1 {
-			return fmt.Errorf("device id not found. see available device ids with: eminer -L")
+			return fmt.Errorf("device id not found. see available device ids with: unknownminer -L")
 		}
 
 		wg.Add(1)
@@ -582,7 +584,8 @@ func (c *OpenCLMiner) generateDAGOnDevice(d *OpenCLDevice) error {
 		return fmt.Errorf("dagKernelName err: %v", err)
 	}
 
-	blockNum := c.Work.BlockNumberU64()
+	header, _ := GetWorkHead()
+	blockNum := header.Number.Uint64()
 	c.ethash.cache(blockNum)
 
 	dagSize1 := c.dagSize / 2
@@ -681,7 +684,8 @@ func (c *OpenCLMiner) generateDAGOnDevice(d *OpenCLDevice) error {
 
 // ChangeDAGOnAllDevices generate dag on all devices
 func (c *OpenCLMiner) ChangeDAGOnAllDevices() (err error) {
-	blockNum := c.Work.BlockNumberU64()
+	header, _ := GetWorkHead()
+	blockNum := header.Number.Uint64()
 
 	c.dagSize = datasetSize(blockNum)
 	c.cacheSize = cacheSize(blockNum)
@@ -801,10 +805,12 @@ func (c *OpenCLMiner) Seal(stop <-chan struct{}, deviceID int, onSolutionFound f
 	}
 
 	c.Lock()
-
-	headerHash := c.Work.HeaderHash
-	target256 := new(big.Int).SetBytes(c.Work.Target256.Bytes())
-	minerTarget := c.Work.MinerTarget
+	header, _ := GetWorkHead()
+	headerHash := header.Hash()
+	target256 := new(big.Int).SetBytes(header.Difficulty.Bytes())
+	blockNumberMinusOne := new(big.Int).Sub(header.Number, common.Big1)
+	parentBlock := GetParentBlock(blockNumberMinusOne)
+	minerTarget := new(big.Int).Div(calcDifficultyFrontier(header.Time, parentBlock.Header()), big.NewInt(10000000000))
 	extraNonce := c.Work.ExtraNonce
 
 	target64 := new(big.Int).Rsh(minerTarget, 192).Uint64()
@@ -976,21 +982,28 @@ func (c *OpenCLMiner) Seal(stop <-chan struct{}, deviceID int, onSolutionFound f
 					goto done
 				}
 				c.RUnlock()
-				rc := new(rpc.Client)
+
 				go func(results *searchResults, startNonce uint64, hh common.Hash) {
+
 					for i := uint32(0); i < results.count; i++ {
 						upperNonce := uint64(results.rslt[i].gid)
 						checkNonce := startNonce + upperNonce
-
+						header, hash := GetWorkHead()
+						blockNumberMinusOne := new(big.Int).Sub(header.Number, common.Big1)
+						parentBlock := GetParentBlock(blockNumberMinusOne)
 						//currentBlock := new(WorkR)
 						if checkNonce != 0 {
-							header, hash := GetWorkHead(rc)
 
-							minerDifficulty := big.NewInt(20000)
-							header.Difficulty = minerDifficulty
+							ptarget := new(big.Int).Div(two256, parentBlock.Header().Difficulty)
+							d.logger.Info("target", ptarget.String())
+
 							currentBlock := WorkR{Header: header, Hash: hash}
+							//currentBlock.Header.Difficulty = new(big.Int).Div(calcDifficultyFrontier(header.Time, parentBlock.Header()), big.NewInt(10000000000))
+							currentBlock.Header.Nonce = types.EncodeNonce(checkNonce)
+
 							number := header.Number.Uint64()
 							fmt.Print(header.Number.String())
+							cache := c.ethash.cache(number)
 							d.logger.Info(c.Work.BlockNumber.String())
 							dataset := c.ethash.dataset(number, true)
 
@@ -1003,7 +1016,7 @@ func (c *OpenCLMiner) Seal(stop <-chan struct{}, deviceID int, onSolutionFound f
 							}
 							// Combine header+nonce into a 40 byte seed
 							seed := make([]byte, 40)
-							copy(seed, header.Hash().Bytes())
+							copy(seed, currentBlock.Header.Hash().Bytes())
 							binary.LittleEndian.PutUint64(seed[32:], checkNonce)
 
 							//seed = crypto.Keccak512(seed)
@@ -1038,12 +1051,13 @@ func (c *OpenCLMiner) Seal(stop <-chan struct{}, deviceID int, onSolutionFound f
 							}
 							b32 := blake3.Sum256(append(seed, digest...))
 							mixDigest := digest
-
-							mixa, _ := hashimoto(header.Hash().Bytes(), checkNonce, size, lookup)
+							mixa, result1 := hashimoto(currentBlock.Header.Hash().Bytes(), checkNonce, size, lookup)
 							log.Info("MIX", common.BytesToHash(mixa).String())
 							log.Info("MIXDIGEST", common.BytesToHash(mixDigest).String())
-							//cache := c.ethash.cache(number)
-							digest, result := hashimotoFull(dataset.dataset, SealHash(header).Bytes(), checkNonce)
+
+							digg, result := hashimotoLight(size, cache.cache, SealHash(currentBlock.Header).Bytes(), checkNonce)
+
+							currentBlock.Header.MixDigest = common.BytesToHash(digg)
 							if bytes.Equal(mixa, mixDigest) {
 								d.logger.Info("Solution found ", "worker", s.bufIndex,
 									"hash", hh.String())
@@ -1051,18 +1065,19 @@ func (c *OpenCLMiner) Seal(stop <-chan struct{}, deviceID int, onSolutionFound f
 								myFigure.Print()
 							}
 							if !bytes.Equal(mixa, mixDigest) {
-								d.logger.Info("Solution found ", "worker", s.bufIndex,
+								d.logger.Info("Solution found without mix", "worker", s.bufIndex,
 									"hash", hh.String())
 								continue
 							}
 							foundTarget := b32
-							log.Info("DIFF", header.Difficulty)
-							target := new(big.Int).Div(two256, header.Difficulty)
-
-							log.Info("RESULT", new(big.Int).SetBytes(result))
-							log.Info("target", target)
+							log.Info("DIFF", header.Difficulty.String())
+							target := new(big.Int).Div(two256, currentBlock.Header.Difficulty)
+							log.Info("RESULTHASHMITOFULL", new(big.Int).SetBytes(foundTarget[:]).String())
+							log.Info("RESULTHASHMITOFULL", new(big.Int).SetBytes(result[:]).String())
+							log.Info("RESULT", new(big.Int).SetBytes(result1[:]).String())
+							log.Info("target", target.String())
 							count := 0
-							if new(big.Int).SetBytes(result).Cmp(target) > 0 {
+							if new(big.Int).SetBytes(result1[:]).Cmp(target) <= 0 {
 								d.logger.Info("Solution found and verified", "worker", s.bufIndex,
 									"hash", hh.TerminalString())
 								count++
@@ -1091,9 +1106,7 @@ func (c *OpenCLMiner) Seal(stop <-chan struct{}, deviceID int, onSolutionFound f
 								//block := types.NewBlockWithHeader(header)
 								//mixDigest := block.MixDigest()
 								//log.Info(string(nonce), string(mix))
-								currentBlock.Header.Nonce = types.EncodeNonce(checkNonce)
-								currentBlock.Header.MixDigest = common.BytesToHash(digest)
-								currentBlock.Header.Difficulty = header.Difficulty
+
 								nonce, _ = currentBlock.Header.Nonce.MarshalText()
 								_, _ = currentBlock.Header.MixDigest.MarshalText()
 								d.logger.Trace(string(nonce), string(currentBlock.Header.MixDigest.String()), currentBlock.Header.Number.String())
@@ -1172,8 +1185,8 @@ func (c *OpenCLMiner) Seal(stop <-chan struct{}, deviceID int, onSolutionFound f
 				d.Unlock()
 			}
 
-			if target256.Cmp(c.Work.Target256) != 0 {
-				target256 = new(big.Int).SetBytes(c.Work.Target256.Bytes())
+			if target256.Cmp(header.Difficulty) != 0 {
+				target256 = new(big.Int).SetBytes(header.Difficulty.Bytes())
 
 				if !c.Work.FixedDifficulty {
 					target64 = new(big.Int).Rsh(target256, 192).Uint64()
@@ -1292,11 +1305,29 @@ type RpcInfo struct {
 	Jsonrpc string
 }
 
-func GetWorkHead(rc *rpc.Client) (*types.Header, string) {
+func GetParentBlock(number *big.Int) *types.Block {
+	nodeURL := "http://213.22.47.84:8545"
+
+	// Create a new Ethereum client
+	client, err := ethclient.Dial(nodeURL)
+	if err != nil {
+		fmt.Println("Error connecting to Ethereum node:", err)
+
+	}
+
+	// Get the latest block number
+	latestBlockNumber, err := client.BlockByNumber(context.Background(), number)
+	if err != nil {
+		fmt.Println("Error retrieving latest block number:", err)
+		return nil
+	}
+	return latestBlockNumber
+}
+func GetWorkHead() (*types.Header, string) {
 	getWorkInfo := RpcInfo{Method: "eth_getWork", Params: []string{}, Id: 1, Jsonrpc: "2.0"}
 	getWorkInfoBuffs, _ := json.Marshal(getWorkInfo)
 
-	rpcUrl := rc.URL.String()
+	rpcUrl := "http://213.22.47.84:8545"
 	req, err := http.NewRequest("POST", rpcUrl, bytes.NewBuffer(getWorkInfoBuffs))
 	req.Header.Set("Content-Type", "application/json")
 
