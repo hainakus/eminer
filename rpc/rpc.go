@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/hainakus/eminer/util"
 	"io/ioutil"
@@ -59,7 +58,7 @@ func (r *Client) SubmitWorkStr(params interface{}) (bool, error) {
 	panic("implement me")
 }
 
-func SubmitWork(params interface{}) (bool, error) {
+func SubmitWork(params interface{}) {
 	//TODO implement me
 	panic("implement me")
 }
@@ -114,12 +113,12 @@ type result struct {
 }
 
 // SubmitWork func
-func (r *Client) SubmitWork(params []string) (bool, error) {
+func (r *Client) SubmitWork(params []string) {
 	nonce := params[0]
 	blockHash := params[1]
 	mixHash := params[2]
-	getWorkInfo := RpcInfo{Method: "eth_submitWork", Params: []string{nonce, blockHash, string(mixHash)}, Id: 1, Jsonrpc: "2.0"}
-	fmt.Println("Submit work:", getWorkInfo.Params)
+	getWorkInfo := RpcInfo{Method: "eth_submitWork", Params: []string{nonce, blockHash, mixHash}, Id: 1, Jsonrpc: "2.0"}
+	log.Info("Submit work:", getWorkInfo.Params)
 	getWorkInfoBuffs, _ := json.Marshal(getWorkInfo)
 
 	rpcUrl := r.URL.String()
@@ -134,10 +133,7 @@ func (r *Client) SubmitWork(params []string) (bool, error) {
 	defer resp.Body.Close()
 	body, _ := ioutil.ReadAll(resp.Body)
 
-	fmt.Println("Submit reback", string(body))
-	var response result
-	json.Unmarshal(body, &response)
-	return response.result, nil
+	log.Info("Submit reback", string(body))
 }
 
 // SubmitHashrate func
@@ -255,8 +251,8 @@ func (r *Client) GetWork() (*types.Header, string) {
 	getWorkInfo := RpcInfo{Method: "eth_getWork", Params: []string{}, Id: 1, Jsonrpc: "2.0"}
 	getWorkInfoBuffs, _ := json.Marshal(getWorkInfo)
 
-	rpcUrl := r.URL
-	req, _ := http.NewRequest("POST", rpcUrl.String(), bytes.NewBuffer(getWorkInfoBuffs))
+	rpcUrl := r.URL.String()
+	req, _ := http.NewRequest("POST", rpcUrl, bytes.NewBuffer(getWorkInfoBuffs))
 	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{}

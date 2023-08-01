@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	common2 "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -146,42 +145,29 @@ func Number(seedHash common.Hash) (int64, error) {
 	return number(seedHash)
 }
 func notifyWork(result *json.RawMessage) (*ethash.Work, error) {
-	var _ int64
-	var getWork []string
-	err := json.Unmarshal(*result, &getWork)
-	if err != nil {
-		return nil, err
-	}
+	var blockNumber *big.Int
 
-	if len(getWork) < 3 {
-		return nil, errors.New("result short")
-	}
-
-	if err != nil {
-		return nil, err
-	}
 	header, _ := GetWorkHead()
-	seedHash, _ := GetSeedHash(header.Number.Uint64())
-	w := ethash.NewWork(header.Number.Int64(), header.Hash(),
-		common.BytesToHash(seedHash), new(big.Int).SetBytes(header.Difficulty.Bytes()), *flagfixediff)
 
-	if len(getWork) > 4 { //extraNonce
-		w.ExtraNonce = new(big.Int).SetBytes(common.FromHex(getWork[3])).Uint64()
-		w.SizeBits, _ = strconv.Atoi(getWork[4])
-	}
+	blockNumber = header.Number
+	seedHash, _ := GetSeedHash(blockNumber.Uint64())
+	sealHash := SealHash(header)
+	w := ethash.NewWork(blockNumber.Int64(), sealHash,
+		common.BytesToHash(seedHash), new(big.Int).Div(new(big.Int).Exp(big.NewInt(2), big.NewInt(256), big.NewInt(0)), header.Difficulty), *flagfixediff)
 
+	//log.Info(strconv.FormatInt(blockNumber, 10))
 	return w, nil
 }
 
 func getWork(c client.Client) (*ethash.Work, error) {
-	var blockNumber int64
+	var blockNumber *big.Int
 
-	header, _ := GetWorkHead()
+	header, _ := c.GetWork()
 
-	blockNumber = header.Number.Int64()
-	seedHash, _ := GetSeedHash(uint64(blockNumber))
+	blockNumber = header.Number
+	seedHash, _ := GetSeedHash(blockNumber.Uint64())
 	sealHash := SealHash(header)
-	w := ethash.NewWork(blockNumber, sealHash,
+	w := ethash.NewWork(blockNumber.Int64(), sealHash,
 		common.BytesToHash(seedHash), new(big.Int).Div(new(big.Int).Exp(big.NewInt(2), big.NewInt(256), big.NewInt(0)), header.Difficulty), *flagfixediff)
 
 	//log.Info(strconv.FormatInt(blockNumber, 10))

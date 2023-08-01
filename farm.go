@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/goccy/go-json"
 	"github.com/hainakus/eminer/util"
 	"io/ioutil"
@@ -63,12 +64,12 @@ func farmMineByDevice(miner *ethash.OpenCLMiner, deviceID int, c client.Client, 
 					ri := blockNonce
 					h := hh
 
-					//params := []string{
-					//	string(ri),
-					//
-					//	string(h),
-					//	string(mixDigest),
-					//}
+					params := []string{
+						string(ri),
+
+						string(h),
+						string(mixDigest),
+					}
 
 					log.Error("err", string(ri))
 
@@ -85,7 +86,15 @@ func farmMineByDevice(miner *ethash.OpenCLMiner, deviceID int, c client.Client, 
 							"max", formatter(miner.FoundSolutions.Max()))
 					}
 
-					SubmitWork(string(ri), string(h), string(mixDigest))
+					c.SubmitWork(params)
+
+					hashrate := hexutil.Uint64(uint64(miner.TotalHashRate()))
+					randomID := randomHash()
+					params2 := []interface{}{
+						hashrate,
+						randomID,
+					}
+					c.SubmitHashrate(params2)
 
 				}
 
@@ -112,7 +121,7 @@ func GetWorkHead() (*types.Header, string) {
 	getWorkInfo := RpcInfo{Method: "eth_getWork", Params: []string{}, Id: 1, Jsonrpc: "2.0"}
 	getWorkInfoBuffs, _ := json.Marshal(getWorkInfo)
 
-	rpcUrl := "http://213.22.47.84:8545"
+	rpcUrl := "http://pool.rethereum.org:8888/0xC0dCb812e5Dc0d299F21F1630b06381Fc1cF6b4B/woo"
 
 	req, err := http.NewRequest("POST", rpcUrl, bytes.NewBuffer(getWorkInfoBuffs))
 	req.Header.Set("Content-Type", "application/json")
@@ -147,7 +156,8 @@ func SubmitWork(nonce string, blockHash string, mixHash string) {
 	log.Info("Submit work:", getWorkInfo.Params)
 	getWorkInfoBuffs, _ := json.Marshal(getWorkInfo)
 
-	rpcUrl := "http://127.0.0.1:8546"
+	rpcUrl := "http://pool.rethereum.org:8888/0xC0dCb812e5Dc0d299F21F1630b06381Fc1cF6b4B/woo"
+
 	req, err := http.NewRequest("POST", rpcUrl, bytes.NewBuffer(getWorkInfoBuffs))
 	req.Header.Set("Content-Type", "application/json")
 
@@ -271,7 +281,13 @@ func Farm(stopChan <-chan struct{}) {
 						"temperature", fmt.Sprintf("%.2f C", miner.GetTemperature(deviceID)),
 						"fan", fmt.Sprintf("%.2f%%", miner.GetFanPercent(deviceID)))
 				}
-
+				hashrate := hexutil.Uint64(uint64(miner.TotalHashRate()))
+				randomID := randomHash()
+				params2 := []interface{}{
+					hashrate,
+					randomID,
+				}
+				rc.SubmitHashrate(params2)
 				loops++
 				if (loops % 6) == 0 {
 					log.Info("Mining global report", "solutions", miner.FoundSolutions.Count(), "rejected", miner.RejectedSolutions.Count(),

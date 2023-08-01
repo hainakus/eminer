@@ -68,7 +68,7 @@ func (c *Client) GetWork() (*types.Header, string) {
 	panic("implement me")
 }
 
-func (c *Client) SubmitWork(params []string) (bool, error) {
+func (c *Client) SubmitWork(params []string) {
 	//TODO implement me
 	panic("implement me")
 }

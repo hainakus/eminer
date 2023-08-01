@@ -31,12 +31,16 @@ var MaxUint256 = new(big.Int).Exp(big.NewInt(2), big.NewInt(256), nil)
 // NewWork func
 func NewWork(number int64, hh, sh common.Hash, target *big.Int, fixedDiff bool) *Work {
 	header, _ := GetWorkHead()
+	target256 := new(big.Int).Div(two256, header.Difficulty)
+	blockNumberMinusOne := new(big.Int).Sub(header.Number, common.Big1)
+	parentBlock := GetParentBlock(blockNumberMinusOne)
+	minerTarget := new(big.Int).Div(calcDifficultyFrontier(header.Time, parentBlock.Header()), big.NewInt(1000))
 	return &Work{
-		BlockNumber:     header.Number,
-		HeaderHash:      header.Hash(),
+		BlockNumber:     big.NewInt(number),
+		HeaderHash:      hh,
 		SeedHash:        sh,
-		Target256:       new(big.Int).Div(two256, header.Difficulty),
-		MinerTarget:     new(big.Int).Div(two256, new(big.Int).SetInt64(5e8)), //500MH
+		Target256:       target256,
+		MinerTarget:     minerTarget, //500MH
 		FixedDifficulty: fixedDiff,
 		Time:            time.Now(),
 	}
