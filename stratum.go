@@ -118,10 +118,7 @@ func Stratum(stopChan <-chan struct{}) {
 
 				if !bytes.Equal(wt.HeaderHash.Bytes(), miner.Work.HeaderHash.Bytes()) {
 					log.Info("Work changed, new work", "hash", wt.HeaderHash.TerminalString(), "difficulty", fmt.Sprintf("%.3f GH", float64(wt.Difficulty().Uint64())/1e9))
-					if miner.CmpDagSize(wt) {
-						log.Warn("DAG size changed, new DAG will be generate")
-						changeDAG <- struct{}{}
-					}
+
 					miner.Lock()
 					miner.Work = wt
 					miner.Unlock()

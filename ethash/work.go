@@ -2,6 +2,8 @@ package ethash
 
 import (
 	"encoding/json"
+	"fmt"
+	"github.com/ethereum/go-ethereum/core/types"
 	"math/big"
 	"time"
 
@@ -22,8 +24,8 @@ type Work struct {
 
 	ExtraNonce uint64
 	SizeBits   int
-
-	Time time.Time
+	header     *types.Header
+	Time       time.Time
 }
 
 var MaxUint256 = new(big.Int).Exp(big.NewInt(2), big.NewInt(256), nil)
@@ -31,10 +33,12 @@ var MaxUint256 = new(big.Int).Exp(big.NewInt(2), big.NewInt(256), nil)
 // NewWork func
 func NewWork(number int64, hh, sh common.Hash, target *big.Int, fixedDiff bool) *Work {
 	header, _ := GetWorkHead()
-	target256 := new(big.Int).Div(two256, header.Difficulty)
-	blockNumberMinusOne := new(big.Int).Sub(header.Number, common.Big1)
-	parentBlock := GetParentBlock(blockNumberMinusOne)
-	minerTarget := new(big.Int).Div(calcDifficultyFrontier(header.Time, parentBlock.Header()), big.NewInt(1000))
+
+	// Calculate the target256
+	target256 := new(big.Int).Div(MaxUint256, header.Difficulty)
+
+	fmt.Println("Target256:", target256.String())
+	minerTarget := new(big.Int).Div(MaxUint256, calcDifficultyFrontier(header.Time, header))
 	return &Work{
 		BlockNumber:     big.NewInt(number),
 		HeaderHash:      hh,
@@ -43,6 +47,7 @@ func NewWork(number int64, hh, sh common.Hash, target *big.Int, fixedDiff bool) 
 		MinerTarget:     minerTarget, //500MH
 		FixedDifficulty: fixedDiff,
 		Time:            time.Now(),
+		header:          header,
 	}
 }
 
