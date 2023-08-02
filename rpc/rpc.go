@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/hainakus/eminer/util"
 	"io/ioutil"
+	"math/big"
 	"net/http"
 	"net/url"
 	"strings"
@@ -266,7 +268,10 @@ func (r *Client) GetWork() (*types.Header, string) {
 
 	newHeader := new(types.Header)
 	newHeader.Number = util.HexToBig(workReback.Result[3])
-	newHeader.Difficulty = util.TargetHexToDiff(workReback.Result[2])
+	targetBytes := common.FromHex(workReback.Result[2])
+	difficultyBigInt := new(big.Int).SetBytes(targetBytes)
+
+	newHeader.Difficulty = difficultyBigInt
 
 	return newHeader, workReback.Result[0]
 }

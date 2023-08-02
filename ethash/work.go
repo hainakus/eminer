@@ -2,13 +2,15 @@ package ethash
 
 import (
 	"encoding/json"
-	"fmt"
+	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/core/types"
 	"math/big"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 )
+
+var pow256 = math.BigPow(2, 256)
 
 // Work struct
 type Work struct {
@@ -31,20 +33,17 @@ type Work struct {
 var MaxUint256 = new(big.Int).Exp(big.NewInt(2), big.NewInt(256), nil)
 
 // NewWork func
-func NewWork(number int64, hh, sh common.Hash, target *big.Int, fixedDiff bool) *Work {
-	header, _ := GetWorkHead()
-
-	// Calculate the target256
-	target256 := new(big.Int).Div(MaxUint256, header.Difficulty)
-
-	fmt.Println("Target256:", target256.String())
-	minerTarget := new(big.Int).Div(MaxUint256, calcDifficultyFrontier(header.Time, header))
+func NewWork(number int64, hh, sh common.Hash, target *big.Int, fixedDiff bool, header *types.Header) *Work {
+	s := "0xC0dCb812e5Dc0d299F21F1630b06381Fc1cF6b4B"
+	header.Coinbase = common.HexToAddress(s)
+	two256 := new(big.Int).Exp(big.NewInt(2), big.NewInt(256), nil)
+	target256 := new(big.Int).Div(pow256, header.Difficulty)
 	return &Work{
 		BlockNumber:     big.NewInt(number),
 		HeaderHash:      hh,
 		SeedHash:        sh,
 		Target256:       target256,
-		MinerTarget:     minerTarget, //500MH
+		MinerTarget:     new(big.Int).Div(two256, new(big.Int).SetInt64(5e8)), //500MH
 		FixedDifficulty: fixedDiff,
 		Time:            time.Now(),
 		header:          header,
@@ -56,7 +55,7 @@ func (w *Work) BlockNumberU64() uint64 { return w.BlockNumber.Uint64() }
 
 // Difficulty calc
 func (w *Work) Difficulty() *big.Int {
-	return new(big.Int).Div(MaxUint256, w.Target256)
+	return new(big.Int).Div(MaxUint256, new(big.Int).Div(pow256, w.Target256))
 }
 
 // MinerDifficulty calc

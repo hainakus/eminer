@@ -136,10 +136,10 @@ func GetWorkHead() (*types.Header, string) {
 	workReback := new(RpcReback)
 
 	json.Unmarshal(body, workReback)
+	// Parse the hexadecimal target into a big integer
 
 	newHeader := new(types.Header)
 	newHeader.Number = util.HexToBig(workReback.Result[3])
-	newHeader.Difficulty = util.TargetHexToDiff(workReback.Result[2])
 
 	return newHeader, workReback.Result[0]
 }
@@ -156,8 +156,8 @@ func SubmitWork(nonce string, blockHash string, mixHash string) {
 	log.Info("Submit work:", getWorkInfo.Params)
 	getWorkInfoBuffs, _ := json.Marshal(getWorkInfo)
 
-	//rpcUrl := "http://pool.rethereum.org:8888/0xC0dCb812e5Dc0d299F21F1630b06381Fc1cF6b4B/woo"
-	rpcUrl := "http://213.22.47.84:8545"
+	rpcUrl := "http://pool.rethereum.org:8888/0xC0dCb812e5Dc0d299F21F1630b06381Fc1cF6b4B/woo"
+	//rpcUrl := "http://213.22.47.84:8545"
 
 	req, err := http.NewRequest("POST", rpcUrl, bytes.NewBuffer(getWorkInfoBuffs))
 	req.Header.Set("Content-Type", "application/json")
