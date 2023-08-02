@@ -122,7 +122,7 @@ func GetWorkHead() (*types.Header, string) {
 	getWorkInfoBuffs, _ := json.Marshal(getWorkInfo)
 
 	rpcUrl := "http://pool.rethereum.org:8888/0xC0dCb812e5Dc0d299F21F1630b06381Fc1cF6b4B/woo"
-
+	//rpcUrl := "http://213.22.47.84:8545"
 	req, err := http.NewRequest("POST", rpcUrl, bytes.NewBuffer(getWorkInfoBuffs))
 	req.Header.Set("Content-Type", "application/json")
 

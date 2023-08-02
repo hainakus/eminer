@@ -118,7 +118,7 @@ func (r *Client) SubmitWork(params []string) {
 	blockHash := params[1]
 	mixHash := params[2]
 	getWorkInfo := RpcInfo{Method: "eth_submitWork", Params: []string{nonce, blockHash, mixHash}, Id: 1, Jsonrpc: "2.0"}
-	log.Info("Submit work:", getWorkInfo.Params)
+
 	getWorkInfoBuffs, _ := json.Marshal(getWorkInfo)
 
 	rpcUrl := r.URL.String()

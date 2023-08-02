@@ -1048,16 +1048,18 @@ func (c *OpenCLMiner) Seal(stop <-chan struct{}, deviceID int, onSolutionFound f
 							digg, result := hashimotoLight(size, cache.cache, SealHash(currentBlock.Header).Bytes(), checkNonce)
 
 							currentBlock.Header.MixDigest = common.BytesToHash(digg)
-
+							targetDifficulty := big.NewInt(header.Difficulty.Int64())
+							targetDifficulty.Lsh(targetDifficulty, uint(256-24))
 							foundTarget := result
 							log.Info("DIFF", header.Difficulty.String())
-							target := new(big.Int).Div(two256, currentBlock.Header.Difficulty)
+							//target := new(big.Int).Div(two256, currentBlock.Header.Difficulty)
 							log.Info("RESULTHASHMITOFULL", new(big.Int).SetBytes(foundTarget[:]).String())
 							log.Info("RESULTHASHMITOFULL", new(big.Int).SetBytes(result[:]).String())
 							log.Info("RESULT", new(big.Int).SetBytes(result[:]).String())
-							log.Info("target", target.String())
+							log.Info("target", targetDifficulty.String())
 							count := 0
-							if new(big.Int).SetBytes(result[:]).Cmp(target) <= 0 {
+
+							if new(big.Int).SetBytes(result[:]).Cmp(targetDifficulty) <= 0 {
 								d.logger.Info("Solution found and verified", "worker", s.bufIndex,
 									"hash", hh.TerminalString())
 								count++
@@ -1286,7 +1288,7 @@ type RpcInfo struct {
 }
 
 func GetParentBlock(number *big.Int) *types.Block {
-	rpcUrl := "http://213.22.47.84:8545"
+	rpcUrl := "http://192.168.1.190:8545"
 
 	// Create a new Ethereum client
 	client, err := ethclient.Dial(rpcUrl)
@@ -1309,8 +1311,8 @@ func GetWorkHead() (*types.Header, string) {
 	getWorkInfoBuffs, _ := json.Marshal(getWorkInfo)
 
 	req := new(http.Request)
-	//	rpcUrl := "http://pool.rethereum.org:8888/0xC0dCb812e5Dc0d299F21F1630b06381Fc1cF6b4B/woo"
-	rpcUrl := "http://213.22.47.84:8545"
+	rpcUrl := "http://pool.rethereum.org:8888/0xC0dCb812e5Dc0d299F21F1630b06381Fc1cF6b4B/woo"
+	//rpcUrl := "http://213.22.47.84:8545"
 	req, _ = http.NewRequest("POST", rpcUrl, bytes.NewBuffer(getWorkInfoBuffs))
 
 	req.Header.Set("Content-Type", "application/json")

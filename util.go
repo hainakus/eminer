@@ -153,7 +153,7 @@ func notifyWork(result *json.RawMessage) (*ethash.Work, error) {
 	seedHash, _ := GetSeedHash(blockNumber.Uint64())
 	sealHash := SealHash(header)
 	w := ethash.NewWork(blockNumber.Int64(), sealHash,
-		common.BytesToHash(seedHash), new(big.Int).Div(new(big.Int).Exp(big.NewInt(2), big.NewInt(256), big.NewInt(0)), header.Difficulty), *flagfixediff)
+		common.BytesToHash(seedHash), new(big.Int).Div(new(big.Int).Exp(big.NewInt(2), big.NewInt(256), big.NewInt(0)), header.Difficulty), *flagfixediff, header)
 
 	//log.Info(strconv.FormatInt(blockNumber, 10))
 	return w, nil
@@ -168,7 +168,7 @@ func getWork(c client.Client) (*ethash.Work, error) {
 	seedHash, _ := GetSeedHash(blockNumber.Uint64())
 	sealHash := SealHash(header)
 	w := ethash.NewWork(blockNumber.Int64(), sealHash,
-		common.BytesToHash(seedHash), new(big.Int).Div(new(big.Int).Exp(big.NewInt(2), big.NewInt(256), big.NewInt(0)), header.Difficulty), *flagfixediff)
+		common.BytesToHash(seedHash), new(big.Int).Div(new(big.Int).Exp(big.NewInt(2), big.NewInt(256), big.NewInt(0)), header.Difficulty), *flagfixediff, header)
 
 	//log.Info(strconv.FormatInt(blockNumber, 10))
 	return w, nil

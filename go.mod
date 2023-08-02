@@ -4,7 +4,6 @@ go 1.14
 
 require (
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
-	github.com/common-nighthawk/go-figure v0.0.0-20210622060536-734e95fb86be
 	github.com/deckarep/golang-set v1.8.0
 	github.com/edsrzf/mmap-go v1.0.0
 	github.com/ethash/go-opencl v0.0.0-20170924192419-f1ea00997e28
@@ -30,6 +29,7 @@ require (
 	github.com/passkeyra/go-opencl v0.0.0-20220406222639-89fc1cb60037
 	github.com/pelletier/go-toml/v2 v2.0.5 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475
+	github.com/shopspring/decimal v1.3.1
 	github.com/stathat/go v1.0.0 // indirect
 	github.com/tklauser/go-sysconf v0.3.10 // indirect
 	golang.org/x/crypto v0.11.0
