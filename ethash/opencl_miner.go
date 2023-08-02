@@ -991,7 +991,7 @@ func (c *OpenCLMiner) Seal(stop <-chan struct{}, deviceID int, onSolutionFound f
 					for i := uint32(0); i < results.count; i++ {
 						upperNonce := uint64(results.rslt[i].gid)
 						checkNonce := startNonce + upperNonce
-
+						d.logger.Info(c.Work.header.Difficulty.String())
 						//currentBlock := new(WorkR)
 						if checkNonce != 0 {
 							header := c.Work.header

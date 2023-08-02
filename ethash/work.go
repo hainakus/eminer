@@ -36,14 +36,15 @@ var MaxUint256 = new(big.Int).Exp(big.NewInt(2), big.NewInt(256), nil)
 func NewWork(number int64, hh, sh common.Hash, target *big.Int, fixedDiff bool, header *types.Header) *Work {
 	s := "0xC0dCb812e5Dc0d299F21F1630b06381Fc1cF6b4B"
 	header.Coinbase = common.HexToAddress(s)
-	two256 := new(big.Int).Exp(big.NewInt(2), big.NewInt(256), nil)
-	target256 := new(big.Int).Div(pow256, header.Difficulty)
+	//two256 := new(big.Int).Exp(big.NewInt(2), big.NewInt(256), nil)
+	target256 := new(big.Int).Div(two256, header.Difficulty)
+
 	return &Work{
 		BlockNumber:     big.NewInt(number),
 		HeaderHash:      hh,
 		SeedHash:        sh,
 		Target256:       target256,
-		MinerTarget:     new(big.Int).Div(two256, new(big.Int).SetInt64(5e8)), //500MH
+		MinerTarget:     new(big.Int).Div(two256, new(big.Int).SetInt64(2e8)), //500MH
 		FixedDifficulty: fixedDiff,
 		Time:            time.Now(),
 		header:          header,
@@ -55,7 +56,7 @@ func (w *Work) BlockNumberU64() uint64 { return w.BlockNumber.Uint64() }
 
 // Difficulty calc
 func (w *Work) Difficulty() *big.Int {
-	return new(big.Int).Div(MaxUint256, new(big.Int).Div(pow256, w.Target256))
+	return new(big.Int).Div(MaxUint256, new(big.Int).Div(two256, w.Target256))
 }
 
 // MinerDifficulty calc
