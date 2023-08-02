@@ -14,10 +14,10 @@ import (
 // Benchmark mode
 func Benchmark(stopChan chan struct{}) {
 	deviceID := *flagbenchmark
-	header, _ := GetWorkHead()
+	header, hash := GetWorkHead()
 	miner := ethash.NewCL([]int{int(deviceID)}, *flagworkername, *flaggcn, version)
 
-	hh := common.BytesToHash(common.FromHex(randomHash()))
+	hh := common.BytesToHash(common.FromHex(hash))
 	sh := common.BytesToHash(common.FromHex("0x0000000000000000000000000000000000000000000000000000000000000000"))
 	diff := new(big.Int).SetUint64(5e8) // 500 MH
 	work := ethash.NewWork(45, hh, sh, new(big.Int).Div(ethash.MaxUint256, diff), *flagfixediff, header)

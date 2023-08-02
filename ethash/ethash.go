@@ -38,7 +38,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/rpc"
-	"github.com/hashicorp/golang-lru/simplelru"
+	lrupkg "github.com/hainakus/go-rethereum/common/lru"
 )
 
 var ErrInvalidDumpMagic = errors.New("invalid dump magic")
@@ -48,7 +48,7 @@ var (
 	two256 = new(big.Int).Exp(big.NewInt(2), big.NewInt(256), big.NewInt(0))
 
 	// sharedEthash is a full instance that can be shared between multiple users.
-	sharedEthash = New(Config{"", 3, 0, false, "", 1, 0, false, ModeNormal, nil}, nil, false, 144)
+	sharedEthash *Ethash
 
 	// algorithmRevision is the data structure version used for file naming.
 	algorithmRevision = 23
@@ -56,6 +56,15 @@ var (
 	// dumpMagic is a dataset dump header to sanity check a data dump.
 	dumpMagic = []uint32{0xbaddcafe, 0xfee1dead}
 )
+
+func init() {
+	sharedConfig := Config{
+		PowMode:       ModeNormal,
+		CachesInMem:   3,
+		DatasetsInMem: 1,
+	}
+	sharedEthash = New(sharedConfig, nil, false)
+}
 
 // isLittleEndian returns whether the local system is running in little or big
 // endian byte order.
@@ -103,12 +112,13 @@ func memoryMapFile(file *os.File, write bool) (mmap.MMap, []uint32, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	// Yay, we managed to memory map the file, here be dragons
-	header := *(*reflect.SliceHeader)(unsafe.Pointer(&mem))
-	header.Len /= 4
-	header.Cap /= 4
-
-	return mem, *(*[]uint32)(unsafe.Pointer(&header)), nil
+	// The file is now memory-mapped. Create a []uint32 view of the file.
+	var view []uint32
+	header := (*reflect.SliceHeader)(unsafe.Pointer(&view))
+	header.Data = (*reflect.SliceHeader)(unsafe.Pointer(&mem)).Data
+	header.Cap = len(mem) / 4
+	header.Len = header.Cap
+	return mem, view, nil
 }
 
 // memoryMapAndGenerate tries to memory map a temporary file of uint32s for write
@@ -126,13 +136,16 @@ func memoryMapAndGenerate(path string, size uint64, lock bool, generator func(bu
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	if err = dump.Truncate(int64(len(dumpMagic))*4 + int64(size)); err != nil {
+	if err = ensureSize(dump, int64(len(dumpMagic))*4+int64(size)); err != nil {
+		dump.Close()
+		os.Remove(temp)
 		return nil, nil, nil, err
 	}
 	// Memory map the file for writing and fill it with the generator
 	mem, buffer, err := memoryMapFile(dump, true)
 	if err != nil {
 		dump.Close()
+		os.Remove(temp)
 		return nil, nil, nil, err
 	}
 	copy(buffer, dumpMagic)
@@ -152,34 +165,45 @@ func memoryMapAndGenerate(path string, size uint64, lock bool, generator func(bu
 	return memoryMap(path, lock)
 }
 
+type cacheOrDataset interface {
+	*cache | *dataset
+}
+
 // lru tracks caches or datasets by their last use time, keeping at most N of them.
-type lru struct {
+type lru[T cacheOrDataset] struct {
 	what string
-	new  func(epoch uint64) interface{}
+	new  func(epoch uint64) T
 	mu   sync.Mutex
 	// Items are kept in a LRU cache, but there is a special case:
 	// We always keep an item for (highest seen epoch) + 1 as the 'future item'.
-	cache      *simplelru.LRU
+	cache      lrupkg.BasicLRU[uint64, T]
 	future     uint64
-	futureItem interface{}
+	futureItem T
 }
 
 // newlru create a new least-recently-used cache for either the verification caches
 // or the mining datasets.
-func newlru(what string, maxItems int, new func(epoch uint64) interface{}) *lru {
-	if maxItems <= 0 {
-		maxItems = 1
+func newlru[T cacheOrDataset](maxItems int, new func(epoch uint64) T) *lru[T] {
+	var what string
+	switch any(T(nil)).(type) {
+	case *cache:
+		what = "cache"
+	case *dataset:
+		what = "dataset"
+	default:
+		panic("unknown type")
 	}
-	cache, _ := simplelru.NewLRU(maxItems, func(key, value interface{}) {
-		log.Trace("Evicted ethash "+what, "epoch", key)
-	})
-	return &lru{what: what, new: new, cache: cache}
+	return &lru[T]{
+		what:  what,
+		new:   new,
+		cache: lrupkg.NewBasicLRU[uint64, T](maxItems),
+	}
 }
 
 // get retrieves or creates an item for the given epoch. The first return value is always
 // non-nil. The second return value is non-nil if lru thinks that an item will be useful in
 // the near future.
-func (lru *lru) get(epoch uint64) (item, future interface{}) {
+func (lru *lru[T]) get(epoch uint64) (item, future T) {
 	lru.mu.Lock()
 	defer lru.mu.Unlock()
 
@@ -213,9 +237,8 @@ type cache struct {
 	once  sync.Once // Ensures the cache is generated only once
 }
 
-// newCache creates a new ethash verification cache and returns it as a plain Go
-// interface to be usable in an LRU cache.
-func newCache(epoch uint64) interface{} {
+// newCache creates a new ethash verification cache.
+func newCache(epoch uint64) *cache {
 	return &cache{epoch: epoch}
 }
 
@@ -265,8 +288,11 @@ func (c *cache) generate(dir string, limit int, lock bool, test bool) {
 		// Iterate over all previous instances and delete old ones
 		for ep := int(c.epoch) - limit; ep >= 0; ep-- {
 			seed := seedHash(uint64(ep)*epochLength + 1)
-			path := filepath.Join(dir, fmt.Sprintf("cache-R%d-%x%s", algorithmRevision, seed[:8], endian))
-			os.Remove(path)
+			path := filepath.Join(dir, fmt.Sprintf("cache-R%d-%x%s*", algorithmRevision, seed[:8], endian))
+			files, _ := filepath.Glob(path) // find also the temp files that are generated.
+			for _, file := range files {
+				os.Remove(file)
+			}
 		}
 	})
 }
@@ -282,17 +308,17 @@ func (c *cache) finalizer() {
 
 // dataset wraps an ethash dataset with some metadata to allow easier concurrent use.
 type dataset struct {
-	epoch   uint64    // Epoch for which this cache is relevant
-	dump    *os.File  // File descriptor of the memory mapped cache
-	mmap    mmap.MMap // Memory map itself to unmap before releasing
-	dataset []uint32  // The actual cache data content
-	once    sync.Once // Ensures the cache is generated only once
-	done    uint32    // Atomic flag to determine generation status
+	epoch   uint64      // Epoch for which this cache is relevant
+	dump    *os.File    // File descriptor of the memory mapped cache
+	mmap    mmap.MMap   // Memory map itself to unmap before releasing
+	dataset []uint32    // The actual cache data content
+	once    sync.Once   // Ensures the cache is generated only once
+	done    atomic.Bool // Atomic flag to determine generation status
 }
 
 // newDataset creates a new ethash mining dataset and returns it as a plain Go
 // interface to be usable in an LRU cache.
-func newDataset(epoch uint64) interface{} {
+func newDataset(epoch uint64) *dataset {
 	return &dataset{epoch: epoch}
 }
 
@@ -300,7 +326,7 @@ func newDataset(epoch uint64) interface{} {
 func (d *dataset) generate(dir string, limit int, lock bool, test bool) {
 	d.once.Do(func() {
 		// Mark the dataset generated after we're done. This is needed for remote
-		defer atomic.StoreUint32(&d.done, 1)
+		defer d.done.Store(true)
 
 		csize := cacheSize(d.epoch*epochLength + 1)
 		dsize := datasetSize(d.epoch*epochLength + 1)
@@ -348,7 +374,7 @@ func (d *dataset) generate(dir string, limit int, lock bool, test bool) {
 		if err != nil {
 			logger.Error("Failed to generate mapped ethash dataset", "err", err)
 
-			d.dataset = make([]uint32, dsize/2)
+			d.dataset = make([]uint32, dsize/4)
 			generateDataset(d.dataset, d.epoch, cache)
 		}
 		// Iterate over all previous instances and delete old ones
@@ -364,7 +390,7 @@ func (d *dataset) generate(dir string, limit int, lock bool, test bool) {
 // or not (it may not have been started at all). This is useful for remote miners
 // to default to verification caches instead of blocking on DAG generations.
 func (d *dataset) generated() bool {
-	return atomic.LoadUint32(&d.done) == 1
+	return d.done.Load()
 }
 
 // finalizer closes any file handlers and memory maps open.
@@ -411,6 +437,10 @@ type Config struct {
 	DatasetsLockMmap bool
 	PowMode          Mode
 
+	// When set, notifications sent by the remote sealer will
+	// be block header JSON objects instead of work package arrays.
+	NotifyFull bool
+
 	Log log.Logger `toml:"-"`
 }
 
@@ -419,8 +449,8 @@ type Config struct {
 type Ethash struct {
 	config Config
 
-	caches   *lru // In memory caches to avoid regenerating too often
-	datasets *lru // In memory datasets to avoid regenerating too often
+	caches   *lru[*cache]   // In memory caches to avoid regenerating too often
+	datasets *lru[*dataset] // In memory datasets to avoid regenerating too often
 
 	// Mining related fields
 	rand     *rand.Rand    // Properly seeded random source for nonces
@@ -441,7 +471,7 @@ type Ethash struct {
 // New creates a full sized ethash PoW scheme and starts a background thread for
 // remote mining, also optionally notifying a batch of remote services of new work
 // packages.
-func New(config Config, notify []string, noverify bool, threads int) *Ethash {
+func New(config Config, notify []string, noverify bool) *Ethash {
 	if config.Log == nil {
 		config.Log = log.Root()
 	}
@@ -457,11 +487,13 @@ func New(config Config, notify []string, noverify bool, threads int) *Ethash {
 	}
 	ethash := &Ethash{
 		config:   config,
-		caches:   newlru("cache", config.CachesInMem, newCache),
-		datasets: newlru("dataset", config.DatasetsInMem, newDataset),
+		caches:   newlru(config.CachesInMem, newCache),
+		datasets: newlru(config.DatasetsInMem, newDataset),
 		update:   make(chan struct{}),
 		hashrate: metrics.NewMeterForced(),
-		threads:  threads,
+	}
+	if config.PowMode == ModeShared {
+		ethash.shared = sharedEthash
 	}
 	ethash.remote = startRemoteSealer(ethash, notify, noverify)
 	return ethash
@@ -470,15 +502,7 @@ func New(config Config, notify []string, noverify bool, threads int) *Ethash {
 // NewTester creates a small sized ethash PoW scheme useful only for testing
 // purposes.
 func NewTester(notify []string, noverify bool) *Ethash {
-	ethash := &Ethash{
-		config:   Config{PowMode: ModeTest, Log: log.Root()},
-		caches:   newlru("cache", 1, newCache),
-		datasets: newlru("dataset", 1, newDataset),
-		update:   make(chan struct{}),
-		hashrate: metrics.NewMeterForced(),
-	}
-	ethash.remote = startRemoteSealer(ethash, notify, noverify)
-	return ethash
+	return New(Config{PowMode: ModeTest}, notify, noverify)
 }
 
 // NewFaker creates a ethash consensus engine with a fake PoW scheme that accepts
@@ -538,7 +562,11 @@ func NewShared() *Ethash {
 
 // Close closes the exit channel to notify all backend threads exiting.
 func (ethash *Ethash) Close() error {
-	var err error
+	return ethash.StopRemoteSealer()
+}
+
+// StopRemoteSealer stops the remote sealer
+func (ethash *Ethash) StopRemoteSealer() error {
 	ethash.closeOnce.Do(func() {
 		// Short circuit if the exit channel is not allocated.
 		if ethash.remote == nil {
@@ -547,7 +575,7 @@ func (ethash *Ethash) Close() error {
 		close(ethash.remote.requestExit)
 		<-ethash.remote.exitCh
 	})
-	return err
+	return nil
 }
 
 // cache tries to retrieve a verification cache for the specified block number
@@ -555,15 +583,13 @@ func (ethash *Ethash) Close() error {
 // stored on disk, and finally generating one if none can be found.
 func (ethash *Ethash) cache(block uint64) *cache {
 	epoch := block / epochLength
-	currentI, futureI := ethash.caches.get(epoch)
-	current := currentI.(*cache)
+	current, future := ethash.caches.get(epoch)
 
 	// Wait for generation finish.
 	current.generate(ethash.config.CacheDir, ethash.config.CachesOnDisk, ethash.config.CachesLockMmap, ethash.config.PowMode == ModeTest)
 
 	// If we need a new future cache, now's a good time to regenerate it.
-	if futureI != nil {
-		future := futureI.(*cache)
+	if future != nil {
 		go future.generate(ethash.config.CacheDir, ethash.config.CachesOnDisk, ethash.config.CachesLockMmap, ethash.config.PowMode == ModeTest)
 	}
 	return current
@@ -578,25 +604,20 @@ func (ethash *Ethash) cache(block uint64) *cache {
 func (ethash *Ethash) dataset(block uint64, async bool) *dataset {
 	// Retrieve the requested ethash dataset
 	epoch := block / epochLength
-	currentI, futureI := ethash.datasets.get(epoch)
-	current := currentI.(*dataset)
+	current, future := ethash.datasets.get(epoch)
 
 	// If async is specified, generate everything in a background thread
 	if async && !current.generated() {
 		go func() {
 			current.generate(ethash.config.DatasetDir, ethash.config.DatasetsOnDisk, ethash.config.DatasetsLockMmap, ethash.config.PowMode == ModeTest)
-
-			if futureI != nil {
-				future := futureI.(*dataset)
+			if future != nil {
 				future.generate(ethash.config.DatasetDir, ethash.config.DatasetsOnDisk, ethash.config.DatasetsLockMmap, ethash.config.PowMode == ModeTest)
 			}
 		}()
 	} else {
 		// Either blocking generation was requested, or already done
 		current.generate(ethash.config.DatasetDir, ethash.config.DatasetsOnDisk, ethash.config.DatasetsLockMmap, ethash.config.PowMode == ModeTest)
-
-		if futureI != nil {
-			future := futureI.(*dataset)
+		if future != nil {
 			go future.generate(ethash.config.DatasetDir, ethash.config.DatasetsOnDisk, ethash.config.DatasetsLockMmap, ethash.config.PowMode == ModeTest)
 		}
 	}
@@ -663,15 +684,11 @@ func (ethash *Ethash) APIs(chain consensus.ChainHeaderReader) []rpc.API {
 	return []rpc.API{
 		{
 			Namespace: "eth",
-			Version:   "1.0",
 			Service:   &API{ethash},
-			Public:    true,
 		},
 		{
 			Namespace: "ethash",
-			Version:   "1.0",
 			Service:   &API{ethash},
-			Public:    true,
 		},
 	}
 }

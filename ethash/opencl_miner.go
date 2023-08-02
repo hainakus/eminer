@@ -255,7 +255,7 @@ func (c *OpenCLMiner) InitCL() error {
 		DatasetsLockMmap: false,
 	}
 	InitConfig(&newConfig)
-	pow := New(newConfig, nil, false, 144)
+	pow := New(newConfig, nil, false)
 	//pow.dataset(blockNum, true) // generates DAG on CPU if we don't have it
 	pow.cache(blockNum) // and cache
 
@@ -807,7 +807,7 @@ func (c *OpenCLMiner) Seal(stop <-chan struct{}, deviceID int, onSolutionFound f
 
 	target256 := new(big.Int).Div(two256, header.Difficulty)
 
-	minerTarget := new(big.Int).Div(calcDifficultyFrontier(header.Time, header), big.NewInt(1000))
+	minerTarget := c.Work.MinerTarget
 	extraNonce := c.Work.ExtraNonce
 
 	target64 := new(big.Int).Rsh(minerTarget, 192).Uint64()
@@ -1311,8 +1311,8 @@ func GetWorkHead() (*types.Header, string) {
 	getWorkInfoBuffs, _ := json.Marshal(getWorkInfo)
 
 	req := new(http.Request)
-	rpcUrl := "http://pool.rethereum.org:8888/0xC0dCb812e5Dc0d299F21F1630b06381Fc1cF6b4B/woo"
-	//rpcUrl := "http://213.22.47.84:8545"
+	//rpcUrl := "http://pool.rethereum.org:8888/0xC0dCb812e5Dc0d299F21F1630b06381Fc1cF6b4B/woo"
+	rpcUrl := "http://213.22.47.84:8545"
 	req, _ = http.NewRequest("POST", rpcUrl, bytes.NewBuffer(getWorkInfoBuffs))
 
 	req.Header.Set("Content-Type", "application/json")
