@@ -20,6 +20,7 @@ package ethash
 import (
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/consensus"
 	"math"
 	"math/big"
 	"math/rand"
@@ -34,11 +35,11 @@ import (
 	"unsafe"
 
 	"github.com/edsrzf/mmap-go"
-	"github.com/ethereum/go-ethereum/consensus"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/metrics"
-	"github.com/ethereum/go-ethereum/rpc"
 	lrupkg "github.com/hainakus/go-rethereum/common/lru"
+
+	"github.com/hainakus/go-rethereum/log"
+	"github.com/hainakus/go-rethereum/metrics"
+	"github.com/hainakus/go-rethereum/rpc"
 )
 
 var ErrInvalidDumpMagic = errors.New("invalid dump magic")

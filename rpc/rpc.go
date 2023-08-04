@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -121,7 +122,7 @@ func (r *Client) SubmitWork(nonce string, blockHash string, mixHash string) {
 	getWorkInfo := RpcInfo{Method: "eth_submitWork", Params: []string{nonce, blockHash, mixHash}, Id: 1, Jsonrpc: "2.0"}
 
 	getWorkInfoBuffs, _ := json.Marshal(getWorkInfo)
-
+	fmt.Print("RESULT", getWorkInfo.Params)
 	rpcUrl := r.URL.String()
 	req, err := http.NewRequest("POST", rpcUrl, bytes.NewBuffer(getWorkInfoBuffs))
 	req.Header.Set("Content-Type", "application/json")
