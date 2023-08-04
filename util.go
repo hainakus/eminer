@@ -7,6 +7,7 @@ import (
 	common2 "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/hainakus/eminer/util"
 	"golang.org/x/crypto/sha3"
 	"hash"
 	"lukechampine.com/blake3"
@@ -145,32 +146,49 @@ func Number(seedHash common.Hash) (int64, error) {
 	return number(seedHash)
 }
 func notifyWork(result *json.RawMessage) (*ethash.Work, error) {
-	var blockNumber *big.Int
-
-	header, _ := GetWorkHead()
-
-	blockNumber = header.Number
-	seedHash, _ := GetSeedHash(blockNumber.Uint64())
-	sealHash := SealHash(header)
-	w := ethash.NewWork(blockNumber.Int64(), sealHash,
-		common.BytesToHash(seedHash), new(big.Int).Div(new(big.Int).Exp(big.NewInt(2), big.NewInt(256), big.NewInt(0)), header.Difficulty), *flagfixediff, header)
-
-	//log.Info(strconv.FormatInt(blockNumber, 10))
-	return w, nil
+	return nil, nil
 }
 
 func getWork(c client.Client) (*ethash.Work, error) {
-	var blockNumber *big.Int
 
-	header, _ := c.GetWork()
+	getWork, err := c.GetWork()
+	if err != nil {
+		return nil, err
+	}
 
-	blockNumber = header.Number
-	seedHash, _ := GetSeedHash(blockNumber.Uint64())
-	sealHash := SealHash(header)
-	w := ethash.NewWork(blockNumber.Int64(), sealHash,
-		common.BytesToHash(seedHash), new(big.Int).Div(new(big.Int).Exp(big.NewInt(2), big.NewInt(256), big.NewInt(0)), header.Difficulty), *flagfixediff, header)
+	seedHash := common.BytesToHash(common.FromHex(getWork[1]))
+	hh := common.BytesToHash(common.FromHex(getWork[0]))
+	if err != nil {
+		return nil, err
+	}
+	newHeader := new(types.Header)
+	newHeader.Number = util.HexToBig(getWork[3])
+	newHeader.Difficulty = util.TargetHexToDiff(getWork[2])
 
-	//log.Info(strconv.FormatInt(blockNumber, 10))
+	parentHeader := newHeader //c.GetDiff(new(big.Int).Sub(newHeader.Number, common.Big1))
+	diff0, nHeader := c.GetDiffParent()
+	// Convert the compact difficulty to big.Int representation
+	newHeader.Time = nHeader.Time
+	bigCompactDifficulty := util.TargetHexToDiff(diff0)
+
+	// Convert the compact difficulty to big.Int representation
+	//hash := s.ethash.SealHash(block.Header())
+	//s.currentWork[0] = hash.Hex()
+	//s.currentWork[1] = common.BytesToHash(SeedHash(block.NumberU64())).Hex()
+	//s.currentWork[2] = common.BytesToHash(new(big.Int).Div(two256, block.Difficulty()).Bytes()).Hex()
+	//s.currentWork[3] = hexutil.EncodeBig(block.Number())
+	// Calculate the target difficulty as 2^256 / difficulty
+
+	//fmt.Println("Target Difficulty (Boundary Condition):", targetDifficulty)
+
+	w := ethash.NewWork(newHeader.Number.Int64(), hh,
+		seedHash, bigCompactDifficulty, *flagfixediff, nHeader, parentHeader)
+
+	if len(getWork) > 4 { //extraNonce
+		w.ExtraNonce = new(big.Int).SetBytes(common.FromHex(getWork[3])).Uint64()
+		w.SizeBits, _ = strconv.Atoi(getWork[4])
+	}
+
 	return w, nil
 }
 func SealHash(header *types.Header) (hash common.Hash) {

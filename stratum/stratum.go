@@ -2,12 +2,18 @@ package stratum
 
 import (
 	"bufio"
+	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/hainakus/go-rethereum/common/hexutil"
+	"io/ioutil"
 	"math/big"
 	"net"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -19,6 +25,24 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 )
+
+type RpcReback struct {
+	Jsonrpc string   `json:"jsonrpc"`
+	Result  []string `json:"result"`
+	Id      int      `json:"id"`
+}
+
+type RpcInfo struct {
+	Jsonrpc string   `json:"jsonrpc"`
+	Method  string   `json:""`
+	Params  []string `json:"params"`
+	Id      int      `json:"id"`
+}
+
+type Work struct {
+	Header *types.Header
+	Hash   string
+}
 
 // Client structure
 type Client struct {
@@ -63,14 +87,76 @@ type Client struct {
 	tls bool
 }
 
-func (c *Client) GetWork() (*types.Header, string) {
-	//TODO implement me
-	panic("implement me")
+func (c *Client) GetDiff(number *big.Int) (string, *types.Header) {
+	ethereumNodeURL := "http://213.22.47.84:8545"
+
+	// Replace this with the block number you want to retrieve the difficulty for
+
+	// Create an Ethereum client instance
+	client, err := ethclient.Dial(ethereumNodeURL)
+	if err != nil {
+		log.Crit("Failed to connect to the Ethereum client:", err)
+	}
+
+	// Get the block header for the given block number
+	header, err := client.HeaderByNumber(context.Background(), number)
+	if err != nil {
+		log.Crit("Failed to retrieve the block header:", err)
+	}
+
+	//fmt.Println("Block Number:", header.Number.String())
+	//fmt.Println("Block Hash:", header.Hash().Hex())
+	//fmt.Println("Parent Hash:", header.ParentHash.Hex())
+	//
+	//fmt.Println("Difficulty (Compact):", hexutil.EncodeBig(header.Difficulty))
+
+	return hexutil.EncodeBig(header.Difficulty), header
 }
 
-func (c *Client) SubmitWork(params []string) {
-	//TODO implement me
-	panic("implement me")
+func (c *Client) GetDiffParent() (string, *types.Header) {
+	ethereumNodeURL := "http://213.22.47.84:8545"
+
+	// Replace this with the block number you want to retrieve the difficulty for
+
+	// Create an Ethereum client instance
+	client, err := ethclient.Dial(ethereumNodeURL)
+	if err != nil {
+		log.Crit("Failed to connect to the Ethereum client:", err)
+	}
+
+	// Get the block header for the given block number
+	header, err := client.HeaderByNumber(context.Background(), nil)
+	if err != nil {
+		log.Crit("Failed to retrieve the block header:", err)
+	}
+
+	//fmt.Println("Block Number:", header.Number.String())
+	//fmt.Println("Block Hash:", header.Hash().Hex())
+	//fmt.Println("Parent Hash:", header.ParentHash.Hex())
+	//
+	//fmt.Println("Difficulty (Compact):", hexutil.EncodeBig(header.Difficulty))
+
+	return hexutil.EncodeBig(header.Difficulty), header
+}
+
+func (c *Client) SubmitWork(nonce string, blockHash string, mixHash string) {
+	getWorkInfo := RpcInfo{Method: "eth_submitWork", Params: []string{nonce, blockHash, mixHash}, Id: 1, Jsonrpc: "2.0"}
+
+	getWorkInfoBuffs, _ := json.Marshal(getWorkInfo)
+
+	rpcUrl := c.server.String()
+	req, err := http.NewRequest("POST", rpcUrl, bytes.NewBuffer(getWorkInfoBuffs))
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Error("error", err)
+	}
+	defer resp.Body.Close()
+	body, _ := ioutil.ReadAll(resp.Body)
+
+	log.Info("Submit reback", string(body))
 }
 
 type stratumWork struct {
@@ -380,7 +466,7 @@ func (c *Client) Auth() error {
 }
 
 // GetWork from stratum server
-func (c *Client) GetWorkStr() ([]string, error) {
+func (c *Client) GetWork() ([]string, error) {
 	if c.mode != etherproxy {
 		return c.waitWorkFromStratum()
 	}

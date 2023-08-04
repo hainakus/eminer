@@ -20,7 +20,7 @@ func Benchmark(stopChan chan struct{}) {
 	hh := common.BytesToHash(common.FromHex(hash))
 	sh := common.BytesToHash(common.FromHex("0x0000000000000000000000000000000000000000000000000000000000000000"))
 	diff := new(big.Int).SetUint64(5e8) // 500 MH
-	work := ethash.NewWork(45, hh, sh, new(big.Int).Div(ethash.MaxUint256, diff), *flagfixediff, header)
+	work := ethash.NewWork(45, hh, sh, new(big.Int).Div(ethash.MaxUint256, diff), *flagfixediff, header, header)
 
 	miner.Work = work
 

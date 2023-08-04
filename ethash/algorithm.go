@@ -19,6 +19,7 @@ package ethash
 import (
 	"encoding/binary"
 	"hash"
+	"lukechampine.com/blake3"
 	"math/big"
 	"reflect"
 	"runtime"
@@ -31,7 +32,6 @@ import (
 	"github.com/ethereum/go-ethereum/common/bitutil"
 	"github.com/ethereum/go-ethereum/log"
 	"golang.org/x/crypto/sha3"
-	"lukechampine.com/blake3"
 )
 
 const (
@@ -190,7 +190,8 @@ func generateCache(dest []uint32, epoch uint64, seed []byte) {
 			case <-done:
 				return
 			case <-time.After(3 * time.Second):
-				logger.Info("Generating ethash verification cache", "percentage", progress.Load()*100/uint32(rows)/(cacheRounds+1), "elapsed", common.PrettyDuration(time.Since(start)))
+
+				logger.Info("Generating ethash verification cache", "elapsed", common.PrettyDuration(time.Since(start)))
 			}
 		}
 	}()
@@ -390,6 +391,7 @@ func hashimoto(hash []byte, nonce uint64, size uint64, lookup func(index uint32)
 	for i, val := range mix {
 		binary.LittleEndian.PutUint32(digest[i*4:], val)
 	}
+
 	b32 := blake3.Sum256(append(seed, digest...))
 	return digest, b32[:]
 }

@@ -64,13 +64,6 @@ func farmMineByDevice(miner *ethash.OpenCLMiner, deviceID int, c client.Client, 
 					ri := blockNonce
 					h := hh
 
-					params := []string{
-						string(ri),
-
-						string(h),
-						string(mixDigest),
-					}
-
 					log.Error("err", string(ri))
 
 					log.Error("err", string(mixDigest))
@@ -86,7 +79,7 @@ func farmMineByDevice(miner *ethash.OpenCLMiner, deviceID int, c client.Client, 
 							"max", formatter(miner.FoundSolutions.Max()))
 					}
 
-					c.SubmitWork(params)
+					c.SubmitWork(ri, h, string(mixDigest))
 
 					hashrate := hexutil.Uint64(uint64(miner.TotalHashRate()))
 					randomID := randomHash()

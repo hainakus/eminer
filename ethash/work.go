@@ -23,16 +23,17 @@ type Work struct {
 
 	ExtraNonce uint64
 	SizeBits   int
-
-	Time time.Time
+	header     *types.Header
+	parent     *types.Header
+	Time       time.Time
 }
 
 var MaxUint256 = new(big.Int).Exp(big.NewInt(2), big.NewInt(256), nil)
 
 // NewWork func
-func NewWork(number int64, hh, sh common.Hash, target *big.Int, fixedDiff bool, header *types.Header) *Work {
-	s := "0xC0dCb812e5Dc0d299F21F1630b06381Fc1cF6b4B"
-	header.Coinbase = common.HexToAddress(s)
+func NewWork(number int64, hh, sh common.Hash, target *big.Int, fixedDiff bool, header *types.Header, parent *types.Header) *Work {
+	//s := "0xC0dCb812e5Dc0d299F21F1630b06381Fc1cF6b4B"
+	//header.Coinbase = common.HexToAddress(s)
 	//two256 := new(big.Int).Exp(big.NewInt(2), big.NewInt(256), nil)
 	//target256 := new(big.Int).Div(two256, header.Difficulty)
 
@@ -42,8 +43,10 @@ func NewWork(number int64, hh, sh common.Hash, target *big.Int, fixedDiff bool, 
 		SeedHash:        sh,
 		Target256:       target,
 		MinerTarget:     new(big.Int).Div(two256, new(big.Int).SetInt64(2e8)), //500MH
-		FixedDifficulty: true,
+		FixedDifficulty: false,
 		Time:            time.Now(),
+		header:          header,
+		parent:          parent,
 	}
 }
 

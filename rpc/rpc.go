@@ -2,11 +2,14 @@ package rpc
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/hainakus/eminer/util"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"io/ioutil"
+	"math/big"
 	"net/http"
 	"net/url"
 	"strings"
@@ -113,10 +116,8 @@ type result struct {
 }
 
 // SubmitWork func
-func (r *Client) SubmitWork(params []string) {
-	nonce := params[0]
-	blockHash := params[1]
-	mixHash := params[2]
+func (r *Client) SubmitWork(nonce string, blockHash string, mixHash string) {
+
 	getWorkInfo := RpcInfo{Method: "eth_submitWork", Params: []string{nonce, blockHash, mixHash}, Id: 1, Jsonrpc: "2.0"}
 
 	getWorkInfoBuffs, _ := json.Marshal(getWorkInfo)
@@ -247,26 +248,66 @@ func (r *Client) markAlive() {
 	}
 	r.Unlock()
 }
-func (r *Client) GetWork() (*types.Header, string) {
-	getWorkInfo := RpcInfo{Method: "eth_getWork", Params: []string{}, Id: 1, Jsonrpc: "2.0"}
-	getWorkInfoBuffs, _ := json.Marshal(getWorkInfo)
+func (r *Client) GetWork() ([]string, error) {
+	rpcResp, err := r.doPost("eth_getWork", []string{}, 73)
+	var reply []string
+	if err != nil {
+		return reply, err
+	}
+	if rpcResp.Error != nil {
+		return reply, errors.New("[JSON-RPC] " + rpcResp.Error["message"].(string))
+	}
+	err = json.Unmarshal(*rpcResp.Result, &reply)
+	return reply, err
+}
 
-	rpcUrl := r.URL.String()
-	req, _ := http.NewRequest("POST", rpcUrl, bytes.NewBuffer(getWorkInfoBuffs))
-	req.Header.Set("Content-Type", "application/json")
+func (r *Client) GetDiff(number *big.Int) (string, *types.Header) {
+	ethereumNodeURL := "http://213.22.47.84:8545"
 
-	client := &http.Client{}
-	resp, _ := client.Do(req)
+	// Replace this with the block number you want to retrieve the difficulty for
 
-	defer resp.Body.Close()
-	body, _ := ioutil.ReadAll(resp.Body)
-	workReback := new(RpcReback)
+	// Create an Ethereum client instance
+	client, err := ethclient.Dial(ethereumNodeURL)
+	if err != nil {
+		log.Crit("Failed to connect to the Ethereum client:", err)
+	}
 
-	json.Unmarshal(body, workReback)
+	// Get the block header for the given block number
+	header, err := client.HeaderByNumber(context.Background(), number)
+	if err != nil {
+		log.Crit("Failed to retrieve the block header:", err)
+	}
 
-	newHeader := new(types.Header)
-	newHeader.Number = util.HexToBig(workReback.Result[3])
-	newHeader.Difficulty = util.TargetHexToDiff(workReback.Result[2])
+	//fmt.Println("Block Number:", header.Number.String())
+	//fmt.Println("Block Hash:", header.Hash().Hex())
+	//fmt.Println("Parent Hash:", header.ParentHash.Hex())
+	//
+	//fmt.Println("Difficulty (Compact):", hexutil.EncodeBig(header.Difficulty))
 
-	return newHeader, workReback.Result[0]
+	return hexutil.EncodeBig(header.Difficulty), header
+}
+func (r *Client) GetDiffParent() (string, *types.Header) {
+	ethereumNodeURL := "http://213.22.47.84:8545"
+
+	// Replace this with the block number you want to retrieve the difficulty for
+
+	// Create an Ethereum client instance
+	client, err := ethclient.Dial(ethereumNodeURL)
+	if err != nil {
+		log.Crit("Failed to connect to the Ethereum client:", err)
+	}
+
+	// Get the block header for the given block number
+	header, err := client.HeaderByNumber(context.Background(), nil)
+	if err != nil {
+		log.Crit("Failed to retrieve the block header:", err)
+	}
+
+	//fmt.Println("Block Number:", header.Number.String())
+	//fmt.Println("Block Hash:", header.Hash().Hex())
+	//fmt.Println("Parent Hash:", header.ParentHash.Hex())
+	//
+	//fmt.Println("Difficulty (Compact):", hexutil.EncodeBig(header.Difficulty))
+
+	return hexutil.EncodeBig(header.Difficulty), header
 }
