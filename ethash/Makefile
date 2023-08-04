@@ -1,10 +1,10 @@
 all: cl.go gcn.go
 
-cl.go:
-	go-bindata -o cl -split -pkg cl cl/kernel1.cl
+pl.go:
+	go-bindata -o pl -pkg cl cl/kernel1.cl
 
-gcn.go:
-	go-bindata -o gcn -split 	-pkg gcn gcn/bin/*
+pcn.go:
+	go-bindata -o pcn2 	-pkg gcn gcn/
 
 clean:
 	rm -rf cl/*.go

@@ -28,6 +28,97 @@
 #ifdef cl_clang_storage_class_specifiers
 #pragma OPENCL EXTENSION cl_clang_storage_class_specifiers : enable
 #endif
+#define BLAKE3_OUT_LEN 32
+// Define the block length and the number of rounds (same as in C implementation)
+#define BLAKE3_BLOCK_LEN 64
+#define BLAKE3_ROUNDS 12
+
+typedef struct {
+    uint cv[8];
+    ulong chunk_counter;
+    uchar buf[BLAKE3_BLOCK_LEN];
+    uint buf_len;
+} blake3_hasher;
+
+// Helper function to perform the mixing operation
+inline void mix(__global uint* a, __global uint* b, __global uint* c, __global uint* d, uint x, uint y) {
+    *a = (*a + *b + x) ^ d[0];
+    *d = rotate(*d ^ *a, 16);
+    *c = (*c + *d) ^ *a;
+    *b = rotate(*b ^ *c, 12);
+    *a = (*a + *b + y) ^ d[1];
+    *d = rotate(*d ^ *a, 8);
+    *c = (*c + *d) ^ *a;
+    *b = rotate(*b ^ *c, 7);
+}
+
+// Helper function to perform the compression operation
+void blake3_compress(blake3_hasher* h, __global const uint* block) {
+    uint v[16];
+    for (int i = 0; i < 8; i++) {
+        v[i] = h->cv[i];
+        v[i + 8] = h->cv[i];
+    }
+
+    v[12] ^= h->chunk_counter;
+    v[13] ^= h->chunk_counter;
+    v[14] ^= 0xFFFFFFFF;
+
+    for (int i = 0; i < BLAKE3_ROUNDS; i++) {
+        mix(&v[0], &v[4], &v[8], &v[12], block[i], block[i + 1]);
+        i++;
+        mix(&v[1], &v[5], &v[9], &v[13], block[i], block[i + 1]);
+        i++;
+        mix(&v[2], &v[6], &v[10], &v[14], block[i], block[i + 1]);
+        i++;
+        mix(&v[3], &v[7], &v[11], &v[15], block[i], block[i + 1]);
+    }
+
+    for (int i = 0; i < 8; i++) {
+        h->cv[i] ^= v[i] ^ v[i + 8];
+    }
+}
+
+// Kernel function for blake3_core_hash
+__kernel void blake3_core_hash(__global const uchar* input, uint input_len, __global uchar* out) {
+    blake3_hasher h;
+    // Set the chunk_counter to the global id of the work-item
+    h.chunk_counter = get_global_id(0);
+
+    // Process complete blocks
+    uint input_blocks = input_len / BLAKE3_BLOCK_LEN;
+    for (uint i = 0; i < input_blocks; i++) {
+        __global const uint* block = (__global const uint*)&input[i * BLAKE3_BLOCK_LEN];
+        blake3_compress(&h, block);
+    }
+
+    // Process the last incomplete block (if any)
+    uint remainder = input_len % BLAKE3_BLOCK_LEN;
+    if (remainder > 0) {
+        uint block[16] = {0};
+        memcpy(block, &input[input_blocks * BLAKE3_BLOCK_LEN], remainder);
+        h.buf_len = remainder;
+
+        // Pad the last block with 0x1 and process
+        h.buf[remainder] = 0x1;
+        memset(&h.buf[remainder + 1], 0, BLAKE3_BLOCK_LEN - remainder - 1);
+        blake3_compress(&h, (__global const uint*)h.buf);
+    }
+
+    // Store the final CV into the output buffer
+    memcpy(&out[get_global_id(0) * 32], h.cv, 32);
+}
+
+typedef union {
+    uint uints[BLAKE3_OUT_LEN / sizeof(uint)];
+    uchar bytes[BLAKE3_OUT_LEN];
+} blake3_hash_t;
+inline uint2 blake3_to_uint2(blake3_hash_t hash) {
+    uint2 result;
+    memcpy(&result, hash.bytes, sizeof(result));
+    return result;
+}
+
 
 #if defined(cl_amd_media_ops)
 #if PLATFORM == OPENCL_PLATFORM_CLOVER
@@ -320,9 +411,15 @@ __kernel void search(
     state[23] = (uint2)(0);
     state[24] = (uint2)(0);
 
-    uint2 mixhash[4];
+      blake3_hash_t mixhash[4];
+
 
     for (int pass = 0; pass < 2; ++pass) {
+
+        blake3_hash_t hash = blake3_core_hash(state, sizeof(state));
+
+
+        mixhash[0] = blake3_to_uint2(hash);
         KECCAK_PROCESS(state, select(5, 12, pass != 0), select(8, 1, pass != 0));
         if (pass > 0)
             break;
@@ -375,7 +472,7 @@ __kernel void search(
             barrier(CLK_LOCAL_MEM_FENCE);
         }
 
-        mixhash[0] = state[8];
+          mixhash[0] = blake3_to_uint2(hash);
         mixhash[1] = state[9];
         mixhash[2] = state[10];
         mixhash[3] = state[11];
@@ -393,6 +490,8 @@ __kernel void search(
         state[22] = (uint2)(0);
         state[23] = (uint2)(0);
         state[24] = (uint2)(0);
+
+
     }
 
 #ifdef FAST_EXIT

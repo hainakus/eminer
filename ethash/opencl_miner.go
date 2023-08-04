@@ -12,7 +12,7 @@ import (
 	"github.com/hainakus/eminer/adl"
 	"github.com/hainakus/eminer/counter"
 	clbin "github.com/hainakus/eminer/ethash/cl"
-	"github.com/hainakus/eminer/ethash/gcn"
+
 	"golang.org/x/crypto/sha3"
 	"lukechampine.com/blake3"
 	"math"
@@ -266,7 +266,7 @@ func (c *OpenCLMiner) InitCL() error {
 
 	for i, id := range c.deviceIds {
 		if id > len(devices)-1 {
-			return fmt.Errorf("device id not found. see available device ids with: eminer -L")
+			return fmt.Errorf("device id not found. see available device ids with: Lminer -L")
 		}
 
 		wg.Add(1)
@@ -1356,10 +1356,7 @@ func createDefinations(m map[string]uint64) string {
 }
 
 func gcnSource(name string) ([]byte, error) {
-	asset, err := gcn.Asset("gcn/bin/" + name)
-	if err != nil {
-		return []byte{}, err
-	}
 
-	return asset, nil
+	return nil, nil
+	return nil, nil
 }
